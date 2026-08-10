@@ -1,5 +1,11 @@
 import type { NumericOptions, IntOptions, FloatOptions } from '../types.js'
 
+const NUMERIC_PATTERN = /^[+-]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$/
+const SIGNED_LEADING_ZERO_PATTERN = /^[+-]?0[0-9]/
+const INTEGER_PATTERN = /^[+-]?[0-9]+$/
+const DOT_FLOAT_PATTERN = /^[+-]?([0-9]*\.)?[0-9]+([eE][+-]?[0-9]+)?$/
+const COMMA_FLOAT_PATTERN = /^[+-]?([0-9]*,)?[0-9]+([eE][+-]?[0-9]+)?$/
+
 /**
  * Check if string is numeric
  *
@@ -20,19 +26,9 @@ export function isNumeric(str: string, options: NumericOptions = {}): boolean {
     return false
   }
 
-  const num = Number(str)
-  if (isNaN(num) || !isFinite(num)) {
-    return false
-  }
+  if (!NUMERIC_PATTERN.test(str)) return false
 
-  const { min, max, gt, lt } = options
-
-  if (min !== undefined && num < min) return false
-  if (max !== undefined && num > max) return false
-  if (gt !== undefined && num <= gt) return false
-  if (lt !== undefined && num >= lt) return false
-
-  return true
+  return isFiniteNumberInRange(Number(str), options)
 }
 
 /**
@@ -58,16 +54,15 @@ export function isInt(str: string, options: IntOptions = {}): boolean {
   const { allowLeadingZeroes = false } = options
 
   // Check for leading zeroes
-  if (!allowLeadingZeroes && /^0[0-9]/.test(str)) {
+  if (!allowLeadingZeroes && SIGNED_LEADING_ZERO_PATTERN.test(str)) {
     return false
   }
 
-  const intRegex = /^[+-]?[0-9]+$/
-  if (!intRegex.test(str)) {
+  if (!INTEGER_PATTERN.test(str)) {
     return false
   }
 
-  return isNumeric(str, options)
+  return isFiniteNumberInRange(Number(str), options)
 }
 
 /**
@@ -96,14 +91,14 @@ export function isFloat(str: string, options: FloatOptions = {}): boolean {
   const decimalSeparator = locale.startsWith('en') ? '.' : ','
   const floatRegex =
     decimalSeparator === '.'
-      ? /^[+-]?([0-9]*\.)?[0-9]+([eE][+-]?[0-9]+)?$/
-      : /^[+-]?([0-9]*,)?[0-9]+([eE][+-]?[0-9]+)?$/
+      ? DOT_FLOAT_PATTERN
+      : COMMA_FLOAT_PATTERN
 
   if (!floatRegex.test(str)) {
     return false
   }
 
-  return isNumeric(str.replace(',', '.'), options)
+  return isFiniteNumberInRange(Number(str.replace(',', '.')), options)
 }
 
 /**
@@ -121,6 +116,10 @@ export function isFloat(str: string, options: FloatOptions = {}): boolean {
  * ```
  */
 export function isDecimal(str: string, options: FloatOptions = {}): boolean {
+  if (typeof str !== 'string' || str.length === 0) {
+    return false
+  }
+
   const { locale = 'en-US' } = options
   const decimalSeparator = locale.startsWith('en') ? '.' : ','
 
@@ -129,4 +128,16 @@ export function isDecimal(str: string, options: FloatOptions = {}): boolean {
   }
 
   return isFloat(str, options)
+}
+
+function isFiniteNumberInRange(num: number, options: NumericOptions): boolean {
+  if (!Number.isFinite(num)) return false
+
+  const { min, max, gt, lt } = options
+  if (min !== undefined && num < min) return false
+  if (max !== undefined && num > max) return false
+  if (gt !== undefined && num <= gt) return false
+  if (lt !== undefined && num >= lt) return false
+
+  return true
 }

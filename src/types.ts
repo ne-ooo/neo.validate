@@ -33,6 +33,8 @@ export interface URLOptions {
   requireProtocol?: boolean
   /** Require host in URL */
   requireHost?: boolean
+  /** Require a top-level domain for DNS hostnames */
+  requireTld?: boolean
   /** Require port in URL */
   requirePort?: boolean
   /** Require valid protocol from allowed list */
@@ -127,4 +129,24 @@ export interface NormalizeEmailOptions {
   yahooRemoveSubaddress?: boolean
   /** Remove googlemail.com and replace with gmail.com (default: true) */
   gmailConvertGooglemail?: boolean
+}
+
+/**
+ * Supported credit-card providers
+ */
+export type CreditCardProvider =
+  | 'amex'
+  | 'dinersclub'
+  | 'discover'
+  | 'jcb'
+  | 'mastercard'
+  | 'unionpay'
+  | 'visa'
+
+/**
+ * Credit-card validation options
+ */
+export interface CreditCardOptions {
+  /** Require a specific card provider */
+  provider?: CreditCardProvider
 }

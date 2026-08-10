@@ -1,5 +1,11 @@
 import type { LengthOptions } from '../types.js'
 
+const ASCII_ALPHA_PATTERN = /^[A-Za-z]+$/
+const UNICODE_ALPHA_PATTERN = /^(?:\p{L}\p{M}*)+$/u
+const ASCII_ALPHANUMERIC_PATTERN = /^[A-Za-z0-9]+$/
+const UNICODE_ALPHANUMERIC_PATTERN = /^(?:[\p{L}\p{N}]\p{M}*)+$/u
+const ASCII_PATTERN = /^[\x00-\x7F]*$/
+
 /**
  * Check if string contains only letters (a-z, A-Z)
  *
@@ -19,9 +25,9 @@ export function isAlpha(str: string, locale: string = 'en-US'): boolean {
     return false
   }
 
-  const alphaRegex = locale.startsWith('en')
-    ? /^[A-Za-z]+$/
-    : /^[A-Za-zÀ-ÿ]+$/ // Support accented characters
+  const alphaRegex = locale.toLowerCase().startsWith('en')
+    ? ASCII_ALPHA_PATTERN
+    : UNICODE_ALPHA_PATTERN
 
   return alphaRegex.test(str)
 }
@@ -45,9 +51,9 @@ export function isAlphanumeric(str: string, locale: string = 'en-US'): boolean {
     return false
   }
 
-  const alphanumericRegex = locale.startsWith('en')
-    ? /^[A-Za-z0-9]+$/
-    : /^[A-Za-z0-9À-ÿ]+$/
+  const alphanumericRegex = locale.toLowerCase().startsWith('en')
+    ? ASCII_ALPHANUMERIC_PATTERN
+    : UNICODE_ALPHANUMERIC_PATTERN
 
   return alphanumericRegex.test(str)
 }
@@ -72,7 +78,7 @@ export function isLength(str: string, options: LengthOptions): boolean {
   }
 
   const { min = 0, max = Infinity } = options
-  const length = str.length
+  const length = [...str].length
 
   return length >= min && length <= max
 }
@@ -96,7 +102,7 @@ export function isAscii(str: string): boolean {
     return false
   }
 
-  return /^[\x00-\x7F]*$/.test(str)
+  return ASCII_PATTERN.test(str)
 }
 
 /**

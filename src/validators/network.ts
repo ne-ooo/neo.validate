@@ -1,5 +1,15 @@
 import type { MACAddressOptions } from '../types.js'
 
+const IPV4_PATTERN =
+  /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[0-9])$/
+const IPV6_PATTERN =
+  /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/
+const MAC_NO_SEPARATOR_PATTERN = /^[0-9A-Fa-f]{12}$/
+const MAC_COLON_PATTERN = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/
+const MAC_HYPHEN_PATTERN = /^([0-9A-Fa-f]{2}-){5}[0-9A-Fa-f]{2}$/
+const MAC_DOT_PATTERN = /^([0-9A-Fa-f]{4}\.){2}[0-9A-Fa-f]{4}$/
+const PORT_PATTERN = /^[0-9]+$/
+
 /**
  * Check if string is a valid IP address (IPv4 or IPv6)
  *
@@ -40,9 +50,7 @@ function isIPv4(str: string): boolean {
   // BUG-8c fix: tightened regex to reject leading zeros in octets.
   // [01]?[0-9][0-9]? matched "001", "007", etc. because the optional [01]? combined with
   // the required [0-9] allowed two leading zeros. Use explicit alternation without [01]? prefix.
-  const ipv4Regex =
-    /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[0-9])$/
-  return ipv4Regex.test(str)
+  return IPV4_PATTERN.test(str)
 }
 
 /**
@@ -50,10 +58,7 @@ function isIPv4(str: string): boolean {
  */
 function isIPv6(str: string): boolean {
   // Simplified IPv6 validation (supports standard and compressed formats)
-  const ipv6Regex =
-    /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/
-
-  return ipv6Regex.test(str)
+  return IPV6_PATTERN.test(str)
 }
 
 /**
@@ -85,21 +90,21 @@ export function isMACAddress(str: string, options: MACAddressOptions = {}): bool
 
   // No separator (12 hex characters)
   if (noSeparator) {
-    return /^[0-9A-Fa-f]{12}$/.test(str)
+    return MAC_NO_SEPARATOR_PATTERN.test(str)
   }
 
   // Colon separator (00:1B:63:84:45:E6)
-  if (allowColon && /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/.test(str)) {
+  if (allowColon && MAC_COLON_PATTERN.test(str)) {
     return true
   }
 
   // Hyphen separator (00-1B-63-84-45-E6)
-  if (allowHyphen && /^([0-9A-Fa-f]{2}-){5}[0-9A-Fa-f]{2}$/.test(str)) {
+  if (allowHyphen && MAC_HYPHEN_PATTERN.test(str)) {
     return true
   }
 
   // Dot separator - Cisco format (001B.6384.45E6)
-  if (allowDot && /^([0-9A-Fa-f]{4}\.){2}[0-9A-Fa-f]{4}$/.test(str)) {
+  if (allowDot && MAC_DOT_PATTERN.test(str)) {
     return true
   }
 
@@ -127,7 +132,7 @@ export function isPort(str: string): boolean {
   }
 
   // Check if numeric
-  if (!/^[0-9]+$/.test(str)) {
+  if (!PORT_PATTERN.test(str)) {
     return false
   }
 

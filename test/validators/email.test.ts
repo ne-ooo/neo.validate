@@ -109,6 +109,54 @@ describe('isEmail', () => {
         isEmail('user@example.com', { hostBlacklist: ['spam.com', 'fake.com'] })
       ).toBe(true)
     })
+
+    it('should support allowed and required display names', () => {
+      expect(
+        isEmail('Alice <alice@example.com>', { allowDisplayName: true })
+      ).toBe(true)
+      expect(isEmail('alice@example.com', { requireDisplayName: true })).toBe(false)
+      expect(
+        isEmail('Alice <alice@example.com>', { requireDisplayName: true })
+      ).toBe(true)
+    })
+
+    it('should compare host restrictions case-insensitively', () => {
+      expect(
+        isEmail('user@EXAMPLE.COM', { hostWhitelist: ['example.com'] })
+      ).toBe(true)
+      expect(
+        isEmail('user@SPAM.COM', { hostBlacklist: ['spam.com'] })
+      ).toBe(false)
+    })
+
+    it('should treat blacklistedChars as literal characters', () => {
+      expect(() =>
+        isEmail('user@example.com', { blacklistedChars: '\\' })
+      ).not.toThrow()
+      expect(isEmail('user@example.com', { blacklistedChars: '\\' })).toBe(true)
+    })
+
+    it('should not disable a non-empty whitelist containing invalid hosts', () => {
+      expect(
+        isEmail('user@example.com', { hostWhitelist: ['not_a_domain'] })
+      ).toBe(false)
+    })
+
+    it('should reject malformed option shapes without throwing', () => {
+      expect(isEmail('user@example.com', null as any)).toBe(false)
+      expect(
+        isEmail('user@example.com', { blacklistedChars: null } as any)
+      ).toBe(false)
+      expect(
+        isEmail('user@example.com', { hostWhitelist: null } as any)
+      ).toBe(false)
+      expect(
+        isEmail('user@example.com', { hostBlacklist: null } as any)
+      ).toBe(false)
+      expect(
+        isEmail('user@example.com', { hostWhitelist: [null] } as any)
+      ).toBe(false)
+    })
   })
 
   describe('edge cases', () => {
@@ -143,6 +191,21 @@ describe('isEmail', () => {
     it('should handle emails with trailing dot in domain', () => {
       // Trailing dot is technically valid DNS (FQDN) but most validators reject it
       expect(isEmail('user@example.com.')).toBe(true)
+    })
+
+    it('should reject malformed domain labels', () => {
+      expect(isEmail('a@example..com')).toBe(false)
+      expect(isEmail('a@-example.com')).toBe(false)
+      expect(isEmail('a@example-.com')).toBe(false)
+      expect(isEmail('a@exam_ple.com')).toBe(false)
+      expect(isEmail('a@example.c')).toBe(false)
+      expect(isEmail('a@example.123')).toBe(false)
+      expect(isEmail('a@example.com:443')).toBe(false)
+      expect(isEmail('a@example.com?query')).toBe(false)
+    })
+
+    it('should enforce the local-part byte limit', () => {
+      expect(isEmail(`${'a'.repeat(65)}@example.com`)).toBe(false)
     })
   })
 })

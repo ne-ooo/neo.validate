@@ -24,6 +24,9 @@ describe('isCreditCard', () => {
     it('accepts number with hyphens', () => {
       expect(isCreditCard('4532-0151-1283-0366')).toBe(true)
     })
+    it('accepts a card from the required provider', () => {
+      expect(isCreditCard('4532015112830366', { provider: 'visa' })).toBe(true)
+    })
   })
 
   describe('invalid card numbers', () => {
@@ -46,6 +49,15 @@ describe('isCreditCard', () => {
     it('rejects all zeros (degenerate number no issuer uses)', () => {
       // Fixed: all-identical-digit numbers are now rejected explicitly.
       expect(isCreditCard('0000000000000000')).toBe(false)
+    })
+    it('rejects a Luhn-valid number outside supported issuer ranges', () => {
+      expect(isCreditCard('1234567812345670')).toBe(false)
+    })
+    it('rejects a card from a different required provider', () => {
+      expect(isCreditCard('4532015112830366', { provider: 'mastercard' })).toBe(false)
+    })
+    it('rejects non-conventional whitespace separators', () => {
+      expect(isCreditCard('4532\n0151\n1283\n0366')).toBe(false)
     })
     it('rejects empty string', () => {
       expect(isCreditCard('')).toBe(false)

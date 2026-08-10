@@ -65,6 +65,10 @@ describe('isBase64', () => {
     it('accepts long Base64 string', () => {
       expect(isBase64('dGhpcyBpcyBhIGxvbmcgc3RyaW5n')).toBe(true)
     })
+    it('accepts valid two- and three-character unpadded Base64', () => {
+      expect(isBase64('Zg')).toBe(true)
+      expect(isBase64('Zm8')).toBe(true)
+    })
     it('rejects Base64url chars in standard mode', () => {
       expect(isBase64('SGVsbG8-V29ybGQ')).toBe(false)
     })
@@ -91,6 +95,17 @@ describe('isBase64', () => {
     })
     it('rejects padding in the middle', () => {
       expect(isBase64('SGVs=bG8=')).toBe(false)
+    })
+    it('rejects impossible lengths and padding', () => {
+      expect(isBase64('A')).toBe(false)
+      expect(isBase64('A=')).toBe(false)
+      expect(isBase64('abcde')).toBe(false)
+      expect(isBase64('AAAA=')).toBe(false)
+      expect(isBase64('AAA==')).toBe(false)
+    })
+    it('rejects non-canonical trailing bits', () => {
+      expect(isBase64('AB==')).toBe(false)
+      expect(isBase64('AAB=')).toBe(false)
     })
   })
 })
@@ -189,6 +204,13 @@ describe('isISO8601', () => {
     it('accepts datetime without timezone', () => {
       expect(isISO8601('2023-12-25T10:30:00')).toBe(true)
     })
+    it('accepts fractional seconds longer than milliseconds', () => {
+      expect(isISO8601('2023-12-25T10:30:00.123456Z')).toBe(true)
+    })
+    it('accepts the ISO 8601 end-of-day representation', () => {
+      expect(isISO8601('2023-12-25T24:00:00Z')).toBe(true)
+      expect(isISO8601('2023-12-25T24:00:00.000Z')).toBe(true)
+    })
   })
 
   describe('invalid formats', () => {
@@ -207,6 +229,15 @@ describe('isISO8601', () => {
     })
     it('rejects month 13', () => {
       expect(isISO8601('2023-13-01')).toBe(false)
+    })
+    it('rejects invalid time and timezone fields', () => {
+      expect(isISO8601('2024-01-01T24:00:01Z')).toBe(false)
+      expect(isISO8601('2024-01-01T24:00:00.001Z')).toBe(false)
+      expect(isISO8601('2024-01-01T23:60:00Z')).toBe(false)
+      expect(isISO8601('2024-01-01T23:59:60Z')).toBe(false)
+      expect(isISO8601('2024-01-01T23:59:59+24:00')).toBe(false)
+      expect(isISO8601('2024-01-01T23:59:59+14:01')).toBe(false)
+      expect(isISO8601('2024-01-01T99:99:99+99:99')).toBe(false)
     })
   })
 })
@@ -228,6 +259,10 @@ describe('isRFC3339', () => {
     it('accepts datetime with nanosecond precision', () => {
       expect(isRFC3339('2023-12-25T10:30:00.123456789Z')).toBe(true)
     })
+    it('accepts lowercase t and z and a leap second', () => {
+      expect(isRFC3339('2023-12-25t10:30:00z')).toBe(true)
+      expect(isRFC3339('2023-12-25T23:59:60Z')).toBe(true)
+    })
   })
 
   describe('invalid formats', () => {
@@ -246,6 +281,13 @@ describe('isRFC3339', () => {
     it('rejects Feb 30 in RFC format (invalid calendar date)', () => {
       // Fixed: calendar date is now validated directly — Feb 30 does not exist.
       expect(isRFC3339('2023-02-30T10:30:00Z')).toBe(false)
+    })
+    it('rejects invalid time and timezone fields', () => {
+      expect(isRFC3339('2024-01-01T24:00:00Z')).toBe(false)
+      expect(isRFC3339('2024-01-01T23:60:00Z')).toBe(false)
+      expect(isRFC3339('2024-01-01T23:59:61Z')).toBe(false)
+      expect(isRFC3339('2024-01-01T23:59:59+24:00')).toBe(false)
+      expect(isRFC3339('2024-01-01T99:99:99+99:99')).toBe(false)
     })
   })
 })

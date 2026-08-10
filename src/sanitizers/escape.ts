@@ -1,3 +1,25 @@
+const HTML_ESCAPE_ENTITIES: Readonly<Record<string, string>> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#x27;',
+  '/': '&#x2F;',
+}
+
+const HTML_UNESCAPE_ENTITIES: Readonly<Record<string, string>> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#x27;': "'",
+  '&#x2F;': '/',
+  '&#39;': "'",
+}
+
+const HTML_ESCAPE_PATTERN = /[&<>"'/]/g
+const HTML_UNESCAPE_PATTERN = /&amp;|&lt;|&gt;|&quot;|&#x27;|&#x2F;|&#39;/g
+
 /**
  * Escape HTML entities to prevent XSS attacks
  *
@@ -17,16 +39,7 @@ export function escape(str: string): string {
     return ''
   }
 
-  const htmlEntities: Record<string, string> = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#x27;',
-    '/': '&#x2F;',
-  }
-
-  return str.replace(/[&<>"'/]/g, (char) => htmlEntities[char] || char)
+  return str.replace(HTML_ESCAPE_PATTERN, (char) => HTML_ESCAPE_ENTITIES[char] ?? char)
 }
 
 /**
@@ -48,18 +61,8 @@ export function unescape(str: string): string {
     return ''
   }
 
-  const htmlEntities: Record<string, string> = {
-    '&amp;': '&',
-    '&lt;': '<',
-    '&gt;': '>',
-    '&quot;': '"',
-    '&#x27;': "'",
-    '&#x2F;': '/',
-    '&#39;': "'",
-  }
-
   return str.replace(
-    /&amp;|&lt;|&gt;|&quot;|&#x27;|&#x2F;|&#39;/g,
-    (entity) => htmlEntities[entity] || entity
+    HTML_UNESCAPE_PATTERN,
+    (entity) => HTML_UNESCAPE_ENTITIES[entity] ?? entity
   )
 }

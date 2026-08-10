@@ -136,6 +136,47 @@ describe('isURL', () => {
         isURL('http://example.com', { disallowedHosts: ['spam.com', 'fake.com'] })
       ).toBe(true)
     })
+
+    it('should enforce all restrictions for URLs without a protocol', () => {
+      expect(
+        isURL('evil.com', { requireProtocol: false, allowedHosts: ['good.com'] })
+      ).toBe(false)
+      expect(
+        isURL('evil.com', { requireProtocol: false, disallowedHosts: ['evil.com'] })
+      ).toBe(false)
+      expect(isURL('evil.com', { requireProtocol: false, requirePort: true })).toBe(false)
+      expect(
+        isURL('evil.com?q=1', {
+          requireProtocol: false,
+          allowQueryComponents: false,
+        })
+      ).toBe(false)
+      expect(
+        isURL('evil.com', { requireProtocol: false, protocols: ['https'] })
+      ).toBe(false)
+    })
+
+    it('should respect requireTld for DNS hostnames', () => {
+      expect(isURL('http://localhost', { requireTld: true })).toBe(false)
+      expect(isURL('http://example.com', { requireTld: true })).toBe(true)
+      expect(isURL('http://127.0.0.1', { requireTld: true })).toBe(true)
+      expect(isURL('http://example..com', { requireTld: true })).toBe(false)
+      expect(isURL('http://example.c', { requireTld: true })).toBe(false)
+    })
+
+    it('should recognize an explicit default port', () => {
+      expect(isURL('https://example.com:443', { requirePort: true })).toBe(true)
+    })
+
+    it('should reject malformed option shapes without throwing', () => {
+      expect(isURL('https://example.com', null as any)).toBe(false)
+      expect(isURL('https://example.com', { protocols: null } as any)).toBe(false)
+      expect(isURL('https://example.com', { allowedHosts: null } as any)).toBe(false)
+      expect(isURL('https://example.com', { disallowedHosts: null } as any)).toBe(false)
+      expect(
+        isURL('https://example.com', { allowedHosts: [null] } as any)
+      ).toBe(false)
+    })
   })
 
   describe('edge cases', () => {

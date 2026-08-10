@@ -15,6 +15,10 @@ describe('isNumeric', () => {
     expect(isNumeric('abc')).toBe(false)
     expect(isNumeric('12a')).toBe(false)
     expect(isNumeric('12.5.3')).toBe(false)
+    expect(isNumeric('   ')).toBe(false)
+    expect(isNumeric('0x10')).toBe(false)
+    expect(isNumeric('0b10')).toBe(false)
+    expect(isNumeric('1e3')).toBe(false)
   })
 
   it('should reject non-string values', () => {
@@ -80,11 +84,15 @@ describe('isInt', () => {
     expect(isInt('0123')).toBe(false)
     expect(isInt('0001')).toBe(false)
     expect(isInt('0')).toBe(true) // Single zero is okay
+    expect(isInt('-01')).toBe(false)
+    expect(isInt('+01')).toBe(false)
   })
 
   it('should allow leading zeroes when enabled', () => {
     expect(isInt('0123', { allowLeadingZeroes: true })).toBe(true)
     expect(isInt('0001', { allowLeadingZeroes: true })).toBe(true)
+    expect(isInt('-01', { allowLeadingZeroes: true })).toBe(true)
+    expect(isInt('+01', { allowLeadingZeroes: true })).toBe(true)
   })
 
   it('should validate with range options', () => {
@@ -173,5 +181,11 @@ describe('isDecimal', () => {
     expect(isDecimal('abc')).toBe(false)
     expect(isDecimal('12.5.3')).toBe(false)
     expect(isDecimal('')).toBe(false)
+  })
+
+  it('should reject non-string values without throwing', () => {
+    expect(isDecimal(null as any)).toBe(false)
+    expect(isDecimal(undefined as any)).toBe(false)
+    expect(isDecimal(12.5 as any)).toBe(false)
   })
 })
