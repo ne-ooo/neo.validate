@@ -1,3 +1,18 @@
+const UUID_PATTERNS = {
+  1: /^[0-9a-f]{8}-[0-9a-f]{4}-1[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  3: /^[0-9a-f]{8}-[0-9a-f]{4}-3[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  4: /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  5: /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+} as const
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const ISBN_SEPARATOR_PATTERN = /[\s-]/g
+const ISBN10_PATTERN = /^[0-9]{9}[0-9X]$/i
+const ISBN13_PATTERN = /^[0-9]{13}$/
+const MONGO_ID_PATTERN = /^[0-9a-f]{24}$/i
+const BASE64_URL_PATTERN = /^[A-Za-z0-9_-]+$/
+
 /**
  * Check if string is a valid UUID
  *
@@ -17,19 +32,12 @@ export function isUUID(str: string, version?: 1 | 3 | 4 | 5): boolean {
     return false
   }
 
-  const uuidPatterns = {
-    1: /^[0-9a-f]{8}-[0-9a-f]{4}-1[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    3: /^[0-9a-f]{8}-[0-9a-f]{4}-3[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    4: /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    5: /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-    all: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+  if (version !== undefined) {
+    const versionPattern = (UUID_PATTERNS as Partial<Record<number, RegExp>>)[version]
+    return versionPattern?.test(str) ?? false
   }
 
-  if (version) {
-    return uuidPatterns[version].test(str)
-  }
-
-  return uuidPatterns.all.test(str)
+  return UUID_PATTERN.test(str)
 }
 
 /**
@@ -52,7 +60,7 @@ export function isISBN(str: string, version?: 10 | 13): boolean {
   }
 
   // Remove hyphens and spaces
-  const sanitized = str.replace(/[\s-]/g, '')
+  const sanitized = str.replace(ISBN_SEPARATOR_PATTERN, '')
 
   if (version === 10) {
     return isISBN10(sanitized)
@@ -70,7 +78,7 @@ export function isISBN(str: string, version?: 10 | 13): boolean {
  * Validate ISBN-10
  */
 function isISBN10(str: string): boolean {
-  if (!/^[0-9]{9}[0-9X]$/i.test(str)) {
+  if (!ISBN10_PATTERN.test(str)) {
     return false
   }
 
@@ -89,7 +97,7 @@ function isISBN10(str: string): boolean {
  * Validate ISBN-13
  */
 function isISBN13(str: string): boolean {
-  if (!/^[0-9]{13}$/.test(str)) {
+  if (!ISBN13_PATTERN.test(str)) {
     return false
   }
 
@@ -120,7 +128,7 @@ export function isMongoId(str: string): boolean {
   }
 
   // MongoDB ObjectId is 24 hex characters
-  return /^[0-9a-f]{24}$/i.test(str)
+  return MONGO_ID_PATTERN.test(str)
 }
 
 /**
@@ -147,7 +155,5 @@ export function isJWT(str: string): boolean {
   }
 
   // Each part should be base64url encoded (alphanumeric, -, _)
-  const base64UrlRegex = /^[A-Za-z0-9_-]+$/
-
-  return parts.every((part) => base64UrlRegex.test(part))
+  return parts.every((part) => BASE64_URL_PATTERN.test(part))
 }

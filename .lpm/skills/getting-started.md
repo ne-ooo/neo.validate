@@ -13,7 +13,7 @@ globs:
 
 ## Overview
 
-neo.validate is a zero-dependency string validation and sanitization library. 27x smaller than validator.js (30 KB vs 817 KB), 2-12x faster, tree-shakeable, TypeScript-first. Drop-in compatible API.
+neo.validate is a zero-dependency string validation and sanitization library. It provides tree-shakeable named functions and a TypeScript-first API. It is not a drop-in validator.js replacement. Option names and defaults can differ.
 
 ## Quick Start
 
@@ -78,7 +78,7 @@ import { isNumeric, isInt, isFloat, isDecimal } from '@lpm.dev/neo.validate'
 // isNumeric — any numeric string
 isNumeric('123')        // true
 isNumeric('-123.45')    // true
-isNumeric('1e5')        // true
+isNumeric('1e5')        // false (scientific notation is not decimal syntax)
 isNumeric('abc')        // false
 
 // isInt — integers only
@@ -196,10 +196,11 @@ isJWT('eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abc123')  // true (forma
 import { isCreditCard } from '@lpm.dev/neo.validate'
 
 isCreditCard('4111111111111111')   // true (Visa, Luhn valid)
+isCreditCard('4111111111111111', { provider: 'visa' }) // true
 isCreditCard('1234567890123456')   // false (Luhn invalid)
 ```
 
-Validates using Luhn algorithm (mod 10 checksum). Supports Visa, MasterCard, Amex, Discover (13-19 digits).
+The function validates a supported issuer pattern and the Luhn checksum. The optional `provider` can restrict the accepted issuer. This is format validation only. A payment processor must verify whether a card is usable.
 
 ## Sanitizers
 

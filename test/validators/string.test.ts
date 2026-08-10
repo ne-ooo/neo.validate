@@ -36,6 +36,14 @@ describe('isAlpha', () => {
     expect(isAlpha('naïve', 'fr-FR')).toBe(true)
     expect(isAlpha('café', 'en-US')).toBe(false)
   })
+
+  it('should support Unicode letters without accepting Latin-1 symbols', () => {
+    expect(isAlpha('Ελλάδα', 'el-GR')).toBe(true)
+    expect(isAlpha('你好', 'zh-CN')).toBe(true)
+    expect(isAlpha('cafe\u0301', 'fr-FR')).toBe(true)
+    expect(isAlpha('×', 'fr-FR')).toBe(false)
+    expect(isAlpha('÷', 'fr-FR')).toBe(false)
+  })
 })
 
 describe('isAlphanumeric', () => {
@@ -61,6 +69,12 @@ describe('isAlphanumeric', () => {
     expect(isAlphanumeric('café123', 'fr-FR')).toBe(true)
     expect(isAlphanumeric('naïve456', 'fr-FR')).toBe(true)
     expect(isAlphanumeric('café123', 'en-US')).toBe(false)
+  })
+
+  it('should support Unicode alphanumeric strings without accepting symbols', () => {
+    expect(isAlphanumeric('Ελλάδα123', 'el-GR')).toBe(true)
+    expect(isAlphanumeric('你好123', 'zh-CN')).toBe(true)
+    expect(isAlphanumeric('×123', 'fr-FR')).toBe(false)
   })
 })
 
@@ -91,6 +105,12 @@ describe('isLength', () => {
   it('should validate exact length', () => {
     expect(isLength('hello', { min: 5, max: 5 })).toBe(true)
     expect(isLength('hello', { min: 4, max: 4 })).toBe(false)
+  })
+
+  it('should count Unicode code points instead of UTF-16 code units', () => {
+    expect(isLength('😀', { min: 1, max: 1 })).toBe(true)
+    expect(isLength('a😀b', { min: 3, max: 3 })).toBe(true)
+    expect(isLength('😀', { min: 2 })).toBe(false)
   })
 })
 

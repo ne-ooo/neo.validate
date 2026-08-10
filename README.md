@@ -7,7 +7,7 @@
 - **Zero dependencies** — no runtime dependencies, nothing to audit
 - **Tree-shakeable** — import only `isEmail`, bundle only `isEmail`
 - **TypeScript-first** — strict mode, full type inference
-- **Drop-in compatible** — same API as validator.js
+- **Familiar API** — named validator functions with explicit TypeScript options
 - **Modern** — ESM + CJS, Node.js 18+
 
 ## Installation
@@ -145,6 +145,7 @@ isJWT("eyJ..."); // true (format check)
 import { isCreditCard } from "@lpm.dev/neo.validate";
 
 isCreditCard("4111111111111111"); // true (Visa test number, Luhn valid)
+isCreditCard("4111111111111111", { provider: "visa" }); // true
 isCreditCard("1234567890123456"); // false
 ```
 
@@ -179,7 +180,9 @@ stripLow("Hello\x00World"); // 'HelloWorld'
 
 ## Migration from validator.js
 
-neo.validate has an identical API to validator.js. Replace the import:
+neo.validate uses familiar function names, but it is not a drop-in replacement for
+validator.js. Option names, defaults, supported formats, and non-string input behavior
+can differ. Map options explicitly and run compatibility tests before migrating.
 
 ```typescript
 // Before
@@ -189,7 +192,9 @@ import { isEmail, isURL } from "validator";
 import { isEmail, isURL } from "@lpm.dev/neo.validate";
 ```
 
-The main difference: neo.validate is fully tree-shakeable. Only the functions you import are included in your bundle.
+For example, validator.js uses `require_protocol` and `host_whitelist`; neo.validate
+uses `requireProtocol` and `allowedHosts`. See the included migration guide for the
+known mappings and behavioral differences.
 
 ## License
 

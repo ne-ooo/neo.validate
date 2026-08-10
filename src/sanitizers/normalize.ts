@@ -1,5 +1,9 @@
 import type { NormalizeEmailOptions } from '../types.js'
 
+const DOT_PATTERN = /\./g
+const LOW_CONTROL_PATTERN = /[\x00-\x1F\x7F]/g
+const LOW_CONTROL_EXCEPT_NEWLINES_PATTERN = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g
+
 /**
  * Trim whitespace from both ends of string
  *
@@ -22,8 +26,7 @@ export function trim(str: string, chars?: string): string {
     return str.trim()
   }
 
-  // Escape special regex characters
-  const escapedChars = chars.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const escapedChars = escapeCharacterClass(chars)
   const regex = new RegExp(`^[${escapedChars}]+|[${escapedChars}]+$`, 'g')
   return str.replace(regex, '')
 }
@@ -50,7 +53,7 @@ export function ltrim(str: string, chars?: string): string {
     return str.trimStart()
   }
 
-  const escapedChars = chars.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const escapedChars = escapeCharacterClass(chars)
   const regex = new RegExp(`^[${escapedChars}]+`, 'g')
   return str.replace(regex, '')
 }
@@ -77,7 +80,7 @@ export function rtrim(str: string, chars?: string): string {
     return str.trimEnd()
   }
 
-  const escapedChars = chars.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const escapedChars = escapeCharacterClass(chars)
   const regex = new RegExp(`[${escapedChars}]+$`, 'g')
   return str.replace(regex, '')
 }
@@ -103,6 +106,11 @@ export function normalizeEmail(email: string, options: NormalizeEmailOptions = {
     return email
   }
 
+  const atIndex = email.indexOf('@')
+  if (atIndex <= 0 || atIndex !== email.lastIndexOf('@') || atIndex === email.length - 1) {
+    return email
+  }
+
   const {
     allLowercase = true,
     gmailRemoveDots = true,
@@ -112,7 +120,8 @@ export function normalizeEmail(email: string, options: NormalizeEmailOptions = {
     gmailConvertGooglemail = true,
   } = options
 
-  let [local, domain] = email.split('@') as [string, string]
+  let local = email.slice(0, atIndex)
+  let domain = email.slice(atIndex + 1)
 
   // Convert to lowercase
   if (allLowercase) {
@@ -132,7 +141,7 @@ export function normalizeEmail(email: string, options: NormalizeEmailOptions = {
 
     // Remove dots from Gmail addresses (Gmail ignores dots)
     if (gmailRemoveDots) {
-      local = local.replace(/\./g, '')
+      local = local.replace(DOT_PATTERN, '')
     }
 
     // Remove subaddress (+tag)
@@ -168,6 +177,16 @@ export function normalizeEmail(email: string, options: NormalizeEmailOptions = {
   return `${local}@${domain}`
 }
 
+function escapeCharacterClass(value: string): string {
+  return [...value]
+    .map((character) =>
+      character === '\\' || character === '-' || character === ']' || character === '^'
+        ? `\\${character}`
+        : character
+    )
+    .join('')
+}
+
 /**
  * Remove control characters (ASCII 0-31 and 127)
  *
@@ -188,9 +207,9 @@ export function stripLow(str: string, keepNewLines: boolean = false): string {
 
   if (keepNewLines) {
     // Remove control characters except \n (10), \r (13), \t (9)
-    return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+    return str.replace(LOW_CONTROL_EXCEPT_NEWLINES_PATTERN, '')
   }
 
   // Remove all control characters
-  return str.replace(/[\x00-\x1F\x7F]/g, '')
+  return str.replace(LOW_CONTROL_PATTERN, '')
 }

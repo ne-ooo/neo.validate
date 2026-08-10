@@ -82,6 +82,9 @@ describe('trim', () => {
   it('trims multiple custom characters', () => {
     expect(trim('##hello##', '#')).toBe('hello')
   })
+  it('treats hyphen as a literal custom character', () => {
+    expect(trim('bbbHello', 'a-z')).toBe('bbbHello')
+  })
   it('returns empty string when all chars are trimmed', () => {
     expect(trim('   ')).toBe('')
   })
@@ -104,6 +107,9 @@ describe('ltrim', () => {
   it('does not touch trailing content', () => {
     expect(ltrim('   hello world   ')).toBe('hello world   ')
   })
+  it('does not interpret a custom hyphen as a character range', () => {
+    expect(ltrim('bbbHello', 'a-z')).toBe('bbbHello')
+  })
   it('returns empty string for non-string input', () => {
     // @ts-expect-error intentional wrong type
     expect(ltrim(null)).toBe('')
@@ -119,6 +125,9 @@ describe('rtrim', () => {
   })
   it('does not touch leading content', () => {
     expect(rtrim('   hello world   ')).toBe('   hello world')
+  })
+  it('does not interpret a custom hyphen as a character range', () => {
+    expect(rtrim('Helloaaa', 'a-z')).toBe('Hello')
   })
   it('returns empty string for non-string input', () => {
     // @ts-expect-error intentional wrong type
@@ -176,6 +185,11 @@ describe('normalizeEmail', () => {
     })
     it('returns input unchanged when no @ sign', () => {
       expect(normalizeEmail('notanemail')).toBe('notanemail')
+    })
+    it('returns malformed addresses unchanged instead of dropping data', () => {
+      expect(normalizeEmail('a@b@c')).toBe('a@b@c')
+      expect(normalizeEmail('@example.com')).toBe('@example.com')
+      expect(normalizeEmail('user@')).toBe('user@')
     })
   })
 })

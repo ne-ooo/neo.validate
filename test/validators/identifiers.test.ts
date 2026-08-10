@@ -27,6 +27,9 @@ describe('isUUID', () => {
     it('rejects plain text', () => {
       expect(isUUID('not-a-uuid')).toBe(false)
     })
+    it('rejects an unsupported runtime version without throwing', () => {
+      expect(isUUID('550e8400-e29b-41d4-a716-446655440000', 2 as any)).toBe(false)
+    })
   })
 
   describe('version-specific', () => {

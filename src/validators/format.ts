@@ -1,5 +1,17 @@
 import type { Base64Options } from '../types.js'
 
+const STANDARD_BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+const URL_SAFE_BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+const STANDARD_BASE64_PATTERN = /^([A-Za-z0-9+/]+)(={0,2})$/
+const URL_SAFE_BASE64_PATTERN = /^([A-Za-z0-9_-]+)(={0,2})$/
+const HEXADECIMAL_PATTERN = /^[0-9A-Fa-f]+$/
+const HEX_COLOR_PATTERN = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/
+const ISO8601_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:Z|([+-])(\d{2}):(\d{2}))?)?$/
+const RFC3339_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:[Zz]|([+-])(\d{2}):(\d{2}))$/
+const ZERO_FRACTION_PATTERN = /^0+$/
+
 /**
  * Check if string is valid JSON
  *
@@ -47,14 +59,27 @@ export function isBase64(str: string, options: Base64Options = {}): boolean {
   }
 
   const { urlSafe = false } = options
+  const alphabet = urlSafe ? URL_SAFE_BASE64_ALPHABET : STANDARD_BASE64_ALPHABET
+  const pattern = urlSafe ? URL_SAFE_BASE64_PATTERN : STANDARD_BASE64_PATTERN
+  const match = str.match(pattern)
+  if (!match) return false
 
-  if (urlSafe) {
-    // URL-safe Base64: uses - and _ instead of + and /
-    return /^[A-Za-z0-9_-]+={0,2}$/.test(str)
+  const data = match[1] ?? ''
+  const paddingLength = match[2]?.length ?? 0
+  const remainder = data.length % 4
+  if (remainder === 1) return false
+
+  if (paddingLength > 0) {
+    if (str.length % 4 !== 0) return false
+    if (paddingLength === 1 && remainder !== 3) return false
+    if (paddingLength === 2 && remainder !== 2) return false
   }
 
-  // Standard Base64
-  return /^[A-Za-z0-9+/]+={0,2}$/.test(str)
+  const lastValue = alphabet.indexOf(data.at(-1) ?? '')
+  if (remainder === 2 && (lastValue & 0b1111) !== 0) return false
+  if (remainder === 3 && (lastValue & 0b11) !== 0) return false
+
+  return true
 }
 
 /**
@@ -75,7 +100,7 @@ export function isHexadecimal(str: string): boolean {
     return false
   }
 
-  return /^[0-9A-Fa-f]+$/.test(str)
+  return HEXADECIMAL_PATTERN.test(str)
 }
 
 /**
@@ -98,7 +123,7 @@ export function isHexColor(str: string): boolean {
   }
 
   // Supports #RGB, #RRGGBB, #RRGGBBAA
-  return /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/.test(str)
+  return HEX_COLOR_PATTERN.test(str)
 }
 
 /**
@@ -119,22 +144,21 @@ export function isISO8601(str: string): boolean {
     return false
   }
 
-  // ISO 8601 regex (supports various formats)
-  const iso8601Regex =
-    /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})?)?$/
+  const match = str.match(ISO8601_PATTERN)
+  if (!match) return false
 
-  if (!iso8601Regex.test(str)) {
-    return false
+  const [, year, month, day, hour, minute, second, fraction, , offsetHour, offsetMinute] = match
+  if (!isValidCalendarDate(Number(year), Number(month), Number(day))) return false
+
+  if (hour !== undefined) {
+    if (!isValidIsoTime(Number(hour), Number(minute), Number(second), fraction)) return false
+    if (
+      offsetHour !== undefined &&
+      !isValidIsoOffset(Number(offsetHour), Number(offsetMinute))
+    ) {
+      return false
+    }
   }
-
-  // BUG-8a fix: validate calendar date fields directly instead of relying on
-  // Date constructor which silently rolls over invalid dates (e.g. Feb 30 → Mar 2)
-  const [datePart] = str.split('T')
-  const [year, month, day] = (datePart ?? str).split('-').map(Number)
-  if (year === undefined || month === undefined || day === undefined) return false
-  if (month < 1 || month > 12) return false
-  const daysInMonth = new Date(year, month, 0).getDate()
-  if (day < 1 || day > daysInMonth) return false
 
   return true
 }
@@ -157,22 +181,63 @@ export function isRFC3339(str: string): boolean {
     return false
   }
 
-  // RFC 3339 requires full date-time format
-  const rfc3339Regex =
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/
+  const match = str.match(RFC3339_PATTERN)
+  if (!match) return false
 
-  if (!rfc3339Regex.test(str)) {
+  const [, year, month, day, hour, minute, second, , offsetHour, offsetMinute] = match
+  if (!isValidCalendarDate(Number(year), Number(month), Number(day))) return false
+  if (!isValidTime(Number(hour), Number(minute), Number(second), true)) return false
+
+  if (
+    offsetHour !== undefined &&
+    !isValidRfc3339Offset(Number(offsetHour), Number(offsetMinute))
+  ) {
     return false
   }
 
-  // BUG-8b fix: validate calendar date fields directly instead of relying on
-  // Date constructor which silently rolls over invalid dates (e.g. Feb 30 → Mar 2)
-  const datePart = str.substring(0, 10)
-  const [year, month, day] = datePart.split('-').map(Number)
-  if (year === undefined || month === undefined || day === undefined) return false
-  if (month < 1 || month > 12) return false
-  const daysInMonth = new Date(year, month, 0).getDate()
-  if (day < 1 || day > daysInMonth) return false
-
   return true
+}
+
+function isValidCalendarDate(year: number, month: number, day: number): boolean {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false
+  if (month < 1 || month > 12 || day < 1) return false
+
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const daysByMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  return day <= (daysByMonth[month - 1] ?? 0)
+}
+
+function isValidTime(
+  hour: number,
+  minute: number,
+  second: number,
+  allowLeapSecond: boolean
+): boolean {
+  const maximumSecond = allowLeapSecond ? 60 : 59
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= maximumSecond
+}
+
+function isValidIsoTime(
+  hour: number,
+  minute: number,
+  second: number,
+  fraction: string | undefined
+): boolean {
+  if (hour === 24) {
+    return (
+      minute === 0 &&
+      second === 0 &&
+      (fraction === undefined || ZERO_FRACTION_PATTERN.test(fraction))
+    )
+  }
+
+  return isValidTime(hour, minute, second, false)
+}
+
+function isValidIsoOffset(hour: number, minute: number): boolean {
+  return hour >= 0 && hour <= 14 && minute >= 0 && minute <= 59 && (hour < 14 || minute === 0)
+}
+
+function isValidRfc3339Offset(hour: number, minute: number): boolean {
+  return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59
 }
