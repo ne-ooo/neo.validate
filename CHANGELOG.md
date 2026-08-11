@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-11
+
 ### Added
 
 - Add CI checks for supported Node.js versions, coverage limits, package imports, and publish contents

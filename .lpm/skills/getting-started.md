@@ -1,7 +1,7 @@
 ---
 name: getting-started
 description: How to use neo.validate — 30+ string validators (isEmail, isURL, isNumeric, isInt, isFloat, isAlpha, isIP, isUUID, isJSON, isBase64, isCreditCard, isISBN, isJWT, isISO8601) and sanitizers (escape, unescape, trim, normalizeEmail, stripLow), options for each validator, tree-shakeable imports, TypeScript types
-version: "1.0.0"
+version: "1.1.0"
 globs:
   - "**/*.ts"
   - "**/*.tsx"
