@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-11
+
 ### Added
 
 - Add default input limits for email, URL, JSON, and JWT validation

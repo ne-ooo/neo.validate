@@ -1,7 +1,7 @@
 ---
 name: anti-patterns
 description: Common mistakes when using neo.validate — validators never throw (always return boolean), isDecimal requires decimal point unlike isFloat, isInt rejects leading zeros by default, isEmail requires TLD by default, isURL requires protocol by default, empty string behavior inconsistent across validators, isISO8601 vs isRFC3339 strictness, isJWT validates format only not signature, isPort rejects port 0
-version: "1.1.0"
+version: "1.2.0"
 globs:
   - "**/*.ts"
   - "**/*.tsx"

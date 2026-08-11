@@ -1,6 +1,6 @@
 {
   "name": "@lpm.dev/neo.validate",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Zero-dependency string validation and sanitization - Tree-shakeable alternative to validator.js",
   "author": "neo",
   "license": "MIT",

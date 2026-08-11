@@ -1,7 +1,7 @@
 ---
 name: migrate-from-validator
 description: Migration guide from validator.js to neo.validate — map imports and options explicitly, review different defaults and supported formats, and verify behavior with compatibility tests
-version: "1.1.0"
+version: "1.2.0"
 globs:
   - "**/*.ts"
   - "**/*.tsx"
