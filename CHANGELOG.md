@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Add default input limits for email, URL, JSON, and JWT validation
+- Add security guidance for HTML, URL, JWT, email, and payment-card use
+- Add adversarial runtime tests and oversized-input benchmarks
+
+### Fixed
+
+- Canonicalize URL host policies for trailing dots, international domains, and IPv6 addresses
+- Return stable boolean or string results for malformed runtime arguments
+- Select numeric separators from the requested locale and restrict letters to its Unicode script
+- Compare numeric ranges without `Number` precision loss
+- Check JWT Base64URL encoding, JSON objects, and the algorithm header
+- Keep Googlemail normalization options independent
+- Validate quoted email display names and current card-issuer ranges
+- Count string code points without an intermediate array
+- Minify the distribution bundle to preserve the compressed-size limit
+- Pin the LPM installer checksum and align the CI and publish runtime versions
+
 ## [1.1.0] - 2026-08-11
 
 ### Added

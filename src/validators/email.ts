@@ -9,12 +9,10 @@ const ASCII_LOCAL_PART_PATTERN = /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+$/
 const INVALID_DOMAIN_CHARACTER_PATTERN = /[^\p{L}\p{N}\p{M}.-]/u
 const DOMAIN_LABEL_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i
 const TLD_PATTERN = /^(?:[a-z]{2,63}|xn--[a-z0-9-]{2,59})$/i
+const DEFAULT_MAX_EMAIL_LENGTH = 254
 
 /**
- * Validate email address (RFC 5322 practical regex)
- *
- * Uses practical 99.99% accurate regex instead of full RFC 5322
- * (full RFC regex is 6,343 chars and impractical)
+ * Validate the supported practical email-address subset
  *
  * @param str - String to validate
  * @param options - Email validation options
@@ -36,6 +34,7 @@ export function isEmail(str: string, options: EmailOptions = {}): boolean {
   if (!options || typeof options !== 'object') return false
 
   const {
+    maxLength = DEFAULT_MAX_EMAIL_LENGTH,
     allowDisplayName = false,
     requireDisplayName = false,
     allowUtf8LocalPart = true,
@@ -46,14 +45,24 @@ export function isEmail(str: string, options: EmailOptions = {}): boolean {
   } = options
 
   if (
+    !isPositiveInteger(maxLength) ||
+    typeof allowDisplayName !== 'boolean' ||
+    typeof requireDisplayName !== 'boolean' ||
+    typeof allowUtf8LocalPart !== 'boolean' ||
+    typeof requireTld !== 'boolean' ||
     typeof blacklistedChars !== 'string' ||
     !Array.isArray(hostBlacklist) ||
-    !Array.isArray(hostWhitelist)
+    !Array.isArray(hostWhitelist) ||
+    !hostBlacklist.every((host) => typeof host === 'string') ||
+    !hostWhitelist.every((host) => typeof host === 'string')
   ) {
     return false
   }
 
-  const parsedDisplay = parseDisplayAddress(str)
+  if (str.length > maxLength) return false
+
+  const hasDisplaySyntax = str.includes('<') || str.includes('>')
+  const parsedDisplay = hasDisplaySyntax ? parseDisplayAddress(str) : null
   if (parsedDisplay) {
     if (!allowDisplayName && !requireDisplayName) return false
     if (!isValidDisplayName(parsedDisplay.displayName)) return false
@@ -90,8 +99,11 @@ export function isEmail(str: string, options: EmailOptions = {}): boolean {
   const domain = normalizeDomain(rawDomain, requireTld)
   if (!domain) return false
 
-  if (hostWhitelist.length > 0 && !includesDomain(hostWhitelist, domain)) return false
-  if (includesDomain(hostBlacklist, domain)) return false
+  const normalizedWhitelist = normalizeDomains(hostWhitelist)
+  const normalizedBlacklist = normalizeDomains(hostBlacklist)
+  if (!normalizedWhitelist || !normalizedBlacklist) return false
+  if (normalizedWhitelist.length > 0 && !normalizedWhitelist.includes(domain)) return false
+  if (normalizedBlacklist.includes(domain)) return false
 
   return true
 }
@@ -109,20 +121,39 @@ function parseDisplayAddress(value: string): { displayName: string; address: str
 function isValidDisplayName(value: string): boolean {
   if (!value || DISPLAY_NAME_CONTROL_PATTERN.test(value)) return false
 
-  const isQuoted = value.startsWith('"') && value.endsWith('"')
-  const unquoted = isQuoted ? value.slice(1, -1) : value
-  if (!unquoted.trim()) return false
-
-  return isQuoted || !INVALID_UNQUOTED_DISPLAY_NAME_PATTERN.test(unquoted)
-}
-
-function includesDomain(hosts: string[], domain: string): boolean {
-  for (const host of hosts) {
-    const normalizedHost = normalizeDomain(host, false)
-    if (normalizedHost === domain) return true
+  const startsWithQuote = value.startsWith('"')
+  const endsWithQuote = value.endsWith('"')
+  if (startsWithQuote || endsWithQuote) {
+    if (!startsWithQuote || !endsWithQuote) return false
+    return isValidQuotedDisplayName(value.slice(1, -1))
   }
 
-  return false
+  return Boolean(value.trim()) && !INVALID_UNQUOTED_DISPLAY_NAME_PATTERN.test(value)
+}
+
+function isValidQuotedDisplayName(value: string): boolean {
+  if (!value.trim()) return false
+
+  for (let index = 0; index < value.length; index++) {
+    const character = value[index]
+    if (character === '"') return false
+    if (character !== '\\') continue
+    index += 1
+    if (index >= value.length) return false
+  }
+
+  return true
+}
+
+function normalizeDomains(hosts: string[]): string[] | null {
+  const normalized: string[] = []
+  for (const host of hosts) {
+    const normalizedHost = normalizeDomain(host, false)
+    if (!normalizedHost) return null
+    normalized.push(normalizedHost)
+  }
+
+  return normalized
 }
 
 function normalizeDomain(value: string, requireTld: boolean): string | null {
@@ -167,4 +198,8 @@ function normalizeDomain(value: string, requireTld: boolean): string | null {
 
 function byteLength(value: string): number {
   return utf8Encoder.encode(value).length
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 }

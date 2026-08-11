@@ -44,6 +44,12 @@ describe('isAlpha', () => {
     expect(isAlpha('×', 'fr-FR')).toBe(false)
     expect(isAlpha('÷', 'fr-FR')).toBe(false)
   })
+
+  it('should reject letters from a different locale script', () => {
+    expect(isAlpha('你好', 'fr-FR')).toBe(false)
+    expect(isAlpha('Ж', 'fr-FR')).toBe(false)
+    expect(isAlpha('bonjour', 'not-a-locale')).toBe(false)
+  })
 })
 
 describe('isAlphanumeric', () => {
@@ -75,6 +81,11 @@ describe('isAlphanumeric', () => {
     expect(isAlphanumeric('Ελλάδα123', 'el-GR')).toBe(true)
     expect(isAlphanumeric('你好123', 'zh-CN')).toBe(true)
     expect(isAlphanumeric('×123', 'fr-FR')).toBe(false)
+  })
+
+  it('should reject alphanumeric text from a different locale script', () => {
+    expect(isAlphanumeric('你好123', 'fr-FR')).toBe(false)
+    expect(isAlphanumeric('Ж123', 'fr-FR')).toBe(false)
   })
 })
 
@@ -111,6 +122,17 @@ describe('isLength', () => {
     expect(isLength('😀', { min: 1, max: 1 })).toBe(true)
     expect(isLength('a😀b', { min: 3, max: 3 })).toBe(true)
     expect(isLength('😀', { min: 2 })).toBe(false)
+  })
+
+  it('should use safe defaults and reject malformed bounds', () => {
+    expect(isLength('hello')).toBe(true)
+    expect(isLength('hello', null as any)).toBe(false)
+    expect(isLength('hello', { min: -1 })).toBe(false)
+    expect(isLength('hello', { min: 5, max: 4 })).toBe(false)
+  })
+
+  it('should stop after the maximum length is exceeded', () => {
+    expect(isLength('a'.repeat(100_000), { max: 10 })).toBe(false)
   })
 })
 

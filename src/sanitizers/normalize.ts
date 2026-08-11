@@ -22,6 +22,8 @@ export function trim(str: string, chars?: string): string {
     return ''
   }
 
+  if (chars !== undefined && typeof chars !== 'string') return ''
+
   if (!chars) {
     return str.trim()
   }
@@ -48,6 +50,8 @@ export function ltrim(str: string, chars?: string): string {
   if (typeof str !== 'string') {
     return ''
   }
+
+  if (chars !== undefined && typeof chars !== 'string') return ''
 
   if (!chars) {
     return str.trimStart()
@@ -76,6 +80,8 @@ export function rtrim(str: string, chars?: string): string {
     return ''
   }
 
+  if (chars !== undefined && typeof chars !== 'string') return ''
+
   if (!chars) {
     return str.trimEnd()
   }
@@ -102,9 +108,12 @@ export function rtrim(str: string, chars?: string): string {
  * ```
  */
 export function normalizeEmail(email: string, options: NormalizeEmailOptions = {}): string {
-  if (typeof email !== 'string' || !email.includes('@')) {
+  if (typeof email !== 'string') return ''
+  if (!email.includes('@')) {
     return email
   }
+
+  if (!isNormalizeEmailOptions(options)) return email
 
   const atIndex = email.indexOf('@')
   if (atIndex <= 0 || atIndex !== email.lastIndexOf('@') || atIndex === email.length - 1) {
@@ -132,7 +141,7 @@ export function normalizeEmail(email: string, options: NormalizeEmailOptions = {
   // Gmail-specific normalization
   if (
     domain === 'gmail.com' ||
-    (gmailConvertGooglemail && domain === 'googlemail.com')
+    domain === 'googlemail.com'
   ) {
     // Convert googlemail.com to gmail.com
     if (gmailConvertGooglemail && domain === 'googlemail.com') {
@@ -205,6 +214,8 @@ export function stripLow(str: string, keepNewLines: boolean = false): string {
     return ''
   }
 
+  if (typeof keepNewLines !== 'boolean') return ''
+
   if (keepNewLines) {
     // Remove control characters except \n (10), \r (13), \t (9)
     return str.replace(LOW_CONTROL_EXCEPT_NEWLINES_PATTERN, '')
@@ -212,4 +223,17 @@ export function stripLow(str: string, keepNewLines: boolean = false): string {
 
   // Remove all control characters
   return str.replace(LOW_CONTROL_PATTERN, '')
+}
+
+function isNormalizeEmailOptions(value: unknown): value is NormalizeEmailOptions {
+  if (!value || typeof value !== 'object') return false
+  const options = value as NormalizeEmailOptions
+  return [
+    options.allLowercase,
+    options.gmailRemoveDots,
+    options.gmailRemoveSubaddress,
+    options.outlookRemoveSubaddress,
+    options.yahooRemoveSubaddress,
+    options.gmailConvertGooglemail,
+  ].every((option) => option === undefined || typeof option === 'boolean')
 }

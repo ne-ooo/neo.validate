@@ -4,7 +4,7 @@ const NUMERIC_PATTERN = /^[+-]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$/
 const SIGNED_LEADING_ZERO_PATTERN = /^[+-]?0[0-9]/
 const INTEGER_PATTERN = /^[+-]?[0-9]+$/
 const DOT_FLOAT_PATTERN = /^[+-]?([0-9]*\.)?[0-9]+([eE][+-]?[0-9]+)?$/
-const COMMA_FLOAT_PATTERN = /^[+-]?([0-9]*,)?[0-9]+([eE][+-]?[0-9]+)?$/
+const decimalSeparatorCache = new Map<string, string>()
 
 /**
  * Check if string is numeric
@@ -26,9 +26,9 @@ export function isNumeric(str: string, options: NumericOptions = {}): boolean {
     return false
   }
 
-  if (!NUMERIC_PATTERN.test(str)) return false
+  if (!isNumericOptions(options) || !NUMERIC_PATTERN.test(str)) return false
 
-  return isFiniteNumberInRange(Number(str), options)
+  return isDecimalInRange(str, options)
 }
 
 /**
@@ -51,6 +51,7 @@ export function isInt(str: string, options: IntOptions = {}): boolean {
     return false
   }
 
+  if (!isIntOptions(options)) return false
   const { allowLeadingZeroes = false } = options
 
   // Check for leading zeroes
@@ -62,7 +63,7 @@ export function isInt(str: string, options: IntOptions = {}): boolean {
     return false
   }
 
-  return isFiniteNumberInRange(Number(str), options)
+  return isDecimalInRange(str, options)
 }
 
 /**
@@ -85,20 +86,19 @@ export function isFloat(str: string, options: FloatOptions = {}): boolean {
     return false
   }
 
+  if (!isFloatOptions(options)) return false
   const { locale = 'en-US' } = options
 
-  // Support different decimal separators
-  const decimalSeparator = locale.startsWith('en') ? '.' : ','
-  const floatRegex =
-    decimalSeparator === '.'
-      ? DOT_FLOAT_PATTERN
-      : COMMA_FLOAT_PATTERN
+  const decimalSeparator = getDecimalSeparator(locale)
+  if (!decimalSeparator) return false
+  if (decimalSeparator !== '.' && str.includes('.')) return false
+  const normalized = decimalSeparator === '.' ? str : str.replace(decimalSeparator, '.')
 
-  if (!floatRegex.test(str)) {
+  if (!DOT_FLOAT_PATTERN.test(normalized)) {
     return false
   }
 
-  return isFiniteNumberInRange(Number(str.replace(',', '.')), options)
+  return isDecimalInRange(normalized, options)
 }
 
 /**
@@ -120,8 +120,10 @@ export function isDecimal(str: string, options: FloatOptions = {}): boolean {
     return false
   }
 
+  if (!isFloatOptions(options)) return false
   const { locale = 'en-US' } = options
-  const decimalSeparator = locale.startsWith('en') ? '.' : ','
+  const decimalSeparator = getDecimalSeparator(locale)
+  if (!decimalSeparator) return false
 
   if (!str.includes(decimalSeparator)) {
     return false
@@ -130,14 +132,131 @@ export function isDecimal(str: string, options: FloatOptions = {}): boolean {
   return isFloat(str, options)
 }
 
-function isFiniteNumberInRange(num: number, options: NumericOptions): boolean {
-  if (!Number.isFinite(num)) return false
-
+function isDecimalInRange(value: string, options: NumericOptions): boolean {
+  if (!hasRange(options)) return true
+  const parsedValue = parseDecimal(value)
+  if (!parsedValue) return false
   const { min, max, gt, lt } = options
-  if (min !== undefined && num < min) return false
-  if (max !== undefined && num > max) return false
-  if (gt !== undefined && num <= gt) return false
-  if (lt !== undefined && num >= lt) return false
+  if (min !== undefined && compareDecimals(parsedValue, parseFiniteNumber(min)) < 0) return false
+  if (max !== undefined && compareDecimals(parsedValue, parseFiniteNumber(max)) > 0) return false
+  if (gt !== undefined && compareDecimals(parsedValue, parseFiniteNumber(gt)) <= 0) return false
+  if (lt !== undefined && compareDecimals(parsedValue, parseFiniteNumber(lt)) >= 0) return false
 
   return true
+}
+
+interface DecimalParts {
+  negative: boolean
+  digits: string
+  exponent: number
+}
+
+function parseDecimal(value: string): DecimalParts | null {
+  let unsigned = value
+  let negative = false
+  if (unsigned.startsWith('-') || unsigned.startsWith('+')) {
+    negative = unsigned[0] === '-'
+    unsigned = unsigned.slice(1)
+  }
+
+  const exponentIndex = unsigned.search(/[eE]/)
+  const coefficient = exponentIndex === -1 ? unsigned : unsigned.slice(0, exponentIndex)
+  const exponentText = exponentIndex === -1 ? '0' : unsigned.slice(exponentIndex + 1)
+  const parsedExponent = Number(exponentText)
+  if (Number.isNaN(parsedExponent)) return null
+
+  const decimalIndex = coefficient.indexOf('.')
+  const fractionLength = decimalIndex === -1 ? 0 : coefficient.length - decimalIndex - 1
+  let digits = coefficient.replace('.', '').replace(/^0+/, '')
+  if (!digits) return { negative: false, digits: '0', exponent: 0 }
+
+  let lastSignificantIndex = digits.length
+  while (lastSignificantIndex > 0 && digits.charCodeAt(lastSignificantIndex - 1) === 48) {
+    lastSignificantIndex -= 1
+  }
+  const trailingZeroes = digits.length - lastSignificantIndex
+  digits = digits.slice(0, lastSignificantIndex)
+
+  return {
+    negative,
+    digits,
+    exponent: parsedExponent - fractionLength + trailingZeroes,
+  }
+}
+
+function parseFiniteNumber(value: number): DecimalParts {
+  return parseDecimal(String(value))!
+}
+
+function compareDecimals(left: DecimalParts, right: DecimalParts): number {
+  if (left.digits === '0' && right.digits === '0') return 0
+  if (left.digits === '0') return right.negative ? 1 : -1
+  if (right.digits === '0') return left.negative ? -1 : 1
+  if (left.negative !== right.negative) return left.negative ? -1 : 1
+
+  const magnitude = compareMagnitudes(left, right)
+  return left.negative ? -magnitude : magnitude
+}
+
+function compareMagnitudes(left: DecimalParts, right: DecimalParts): number {
+  const leftOrder = left.digits.length + left.exponent
+  const rightOrder = right.digits.length + right.exponent
+  if (leftOrder !== rightOrder) return leftOrder < rightOrder ? -1 : 1
+
+  const maximumLength = Math.max(left.digits.length, right.digits.length)
+  for (let index = 0; index < maximumLength; index++) {
+    const leftDigit = left.digits[index] ?? '0'
+    const rightDigit = right.digits[index] ?? '0'
+    if (leftDigit !== rightDigit) return leftDigit < rightDigit ? -1 : 1
+  }
+
+  return 0
+}
+
+function getDecimalSeparator(locale: string): string | null {
+  const cached = decimalSeparatorCache.get(locale)
+  if (cached) return cached
+
+  let separator: string | undefined
+  try {
+    separator = new Intl.NumberFormat(locale, { useGrouping: false })
+      .formatToParts(1.1)
+      .find((part) => part.type === 'decimal')?.value
+  } catch {
+    return null
+  }
+
+  if (!separator) return null
+  if (decimalSeparatorCache.size >= 32) decimalSeparatorCache.clear()
+  decimalSeparatorCache.set(locale, separator)
+  return separator
+}
+
+function hasRange(options: NumericOptions): boolean {
+  return (
+    options.min !== undefined ||
+    options.max !== undefined ||
+    options.gt !== undefined ||
+    options.lt !== undefined
+  )
+}
+
+function isNumericOptions(value: unknown): value is NumericOptions {
+  if (!value || typeof value !== 'object') return false
+  const { min, max, gt, lt } = value as NumericOptions
+  return [min, max, gt, lt].every(
+    (bound) => bound === undefined || (typeof bound === 'number' && Number.isFinite(bound))
+  )
+}
+
+function isIntOptions(value: unknown): value is IntOptions {
+  if (!isNumericOptions(value)) return false
+  const { allowLeadingZeroes } = value as IntOptions
+  return allowLeadingZeroes === undefined || typeof allowLeadingZeroes === 'boolean'
+}
+
+function isFloatOptions(value: unknown): value is FloatOptions {
+  if (!isNumericOptions(value)) return false
+  const { locale } = value as FloatOptions
+  return locale === undefined || typeof locale === 'string'
 }

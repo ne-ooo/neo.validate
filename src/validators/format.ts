@@ -1,4 +1,4 @@
-import type { Base64Options } from '../types.js'
+import type { Base64Options, JSONOptions } from '../types.js'
 
 const STANDARD_BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 const URL_SAFE_BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
@@ -11,11 +11,13 @@ const ISO8601_PATTERN =
 const RFC3339_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:[Zz]|([+-])(\d{2}):(\d{2}))$/
 const ZERO_FRACTION_PATTERN = /^0+$/
+const DEFAULT_MAX_JSON_LENGTH = 1_048_576
 
 /**
  * Check if string is valid JSON
  *
  * @param str - String to validate
+ * @param options - JSON validation options
  * @returns true if valid JSON, false otherwise
  *
  * @example
@@ -26,10 +28,14 @@ const ZERO_FRACTION_PATTERN = /^0+$/
  * isJSON('invalid') // false
  * ```
  */
-export function isJSON(str: string): boolean {
+export function isJSON(str: string, options: JSONOptions = {}): boolean {
   if (typeof str !== 'string' || str.length === 0) {
     return false
   }
+
+  if (!options || typeof options !== 'object') return false
+  const { maxLength = DEFAULT_MAX_JSON_LENGTH } = options
+  if (!isPositiveInteger(maxLength) || str.length > maxLength) return false
 
   try {
     JSON.parse(str)
@@ -58,7 +64,9 @@ export function isBase64(str: string, options: Base64Options = {}): boolean {
     return false
   }
 
+  if (!options || typeof options !== 'object') return false
   const { urlSafe = false } = options
+  if (typeof urlSafe !== 'boolean') return false
   const alphabet = urlSafe ? URL_SAFE_BASE64_ALPHABET : STANDARD_BASE64_ALPHABET
   const pattern = urlSafe ? URL_SAFE_BASE64_PATTERN : STANDARD_BASE64_PATTERN
   const match = str.match(pattern)
@@ -127,7 +135,7 @@ export function isHexColor(str: string): boolean {
 }
 
 /**
- * Check if string is valid ISO 8601 date
+ * Check if string matches the supported ISO 8601 calendar-date subset
  *
  * @param str - String to validate
  * @returns true if valid ISO 8601, false otherwise
@@ -240,4 +248,8 @@ function isValidIsoOffset(hour: number, minute: number): boolean {
 
 function isValidRfc3339Offset(hour: number, minute: number): boolean {
   return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 }

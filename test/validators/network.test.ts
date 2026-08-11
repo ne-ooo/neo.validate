@@ -36,6 +36,10 @@ describe('isIP', () => {
     })
   })
 
+  it('rejects an unsupported runtime version', () => {
+    expect(isIP('127.0.0.1', 5 as any)).toBe(false)
+  })
+
   describe('IPv6', () => {
     it('accepts a full IPv6 address', () => {
       expect(isIP('2001:0db8:85a3:0000:0000:8a2e:0370:7334')).toBe(true)
@@ -81,6 +85,13 @@ describe('isMACAddress', () => {
     it('accepts all-zeros MAC', () => {
       expect(isMACAddress('00:00:00:00:00:00')).toBe(true)
     })
+  })
+
+  it('rejects malformed options without throwing', () => {
+    expect(isMACAddress('00:1B:63:84:45:E6', null as any)).toBe(false)
+    expect(
+      isMACAddress('00:1B:63:84:45:E6', { allowColon: 'yes' } as any)
+    ).toBe(false)
   })
 
   describe('hyphen separator', () => {

@@ -49,6 +49,13 @@ describe('isJSON', () => {
       expect(isJSON('')).toBe(false)
     })
   })
+
+  it('enforces the configurable input limit', () => {
+    const json = JSON.stringify('a'.repeat(100))
+    expect(isJSON(json, { maxLength: 50 })).toBe(false)
+    expect(isJSON(json, { maxLength: json.length })).toBe(true)
+    expect(isJSON(json, null as any)).toBe(false)
+  })
 })
 
 describe('isBase64', () => {
@@ -106,6 +113,10 @@ describe('isBase64', () => {
     it('rejects non-canonical trailing bits', () => {
       expect(isBase64('AB==')).toBe(false)
       expect(isBase64('AAB=')).toBe(false)
+    })
+    it('rejects malformed options without throwing', () => {
+      expect(isBase64('SGVsbG8=', null as any)).toBe(false)
+      expect(isBase64('SGVsbG8=', { urlSafe: 'yes' } as any)).toBe(false)
     })
   })
 })

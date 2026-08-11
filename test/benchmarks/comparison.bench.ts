@@ -8,6 +8,7 @@ import {
   isFloat,
   isAlpha,
   isAlphanumeric,
+  isLength,
   isIP,
   isUUID,
   isCreditCard,
@@ -244,6 +245,24 @@ describe('neo.validate vs validator.js - Performance Comparison', () => {
       for (const num of numbers) {
         validator.isNumeric(num)
       }
+    })
+  })
+
+  describe('Oversized Input Rejection', () => {
+    const oversizedText = 'a'.repeat(100_000)
+    const oversizedEmail = `${oversizedText}@example.com`
+    const oversizedUrl = `https://example.com/${oversizedText}`
+
+    bench('neo.validate - bounded isLength', () => {
+      isLength(oversizedText, { max: 10 })
+    })
+
+    bench('neo.validate - oversized isEmail', () => {
+      isEmail(oversizedEmail)
+    })
+
+    bench('neo.validate - oversized isURL', () => {
+      isURL(oversizedUrl)
     })
   })
 })

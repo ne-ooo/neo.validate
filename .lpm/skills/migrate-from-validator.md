@@ -49,6 +49,7 @@ neo.validate uses named exports. ESM consumers can tree-shake unused functions.
 | `require_valid_protocol` | `requireValidProtocol` |
 | `allow_query_components` | `allowQueryComponents` |
 | `allow_fragments` | `allowFragments` |
+| `max_allowed_length` | `maxLength` for URL, email, JSON, and JWT input limits |
 
 Do not pass validator.js option objects directly. Unknown JavaScript properties are
 ignored at runtime and can silently disable an intended restriction.
@@ -60,6 +61,9 @@ ignored at runtime and can silently disable an intended restriction.
 - neo.validate email validation requires a TLD by default.
 - neo.validate `isJSON` accepts JSON primitives.
 - neo.validate standard Base64 accepts correctly formed unpadded input.
+- neo.validate uses `Intl.NumberFormat` to select the decimal separator for a float locale.
+- neo.validate checks the decoded JWT header and payload as JSON objects.
+- neo.validate limits email, URL, JSON, and JWT input by default.
 - neo.validate validators return `false` for most non-string inputs instead of using
   validator.js's exact error behavior.
 - Locale coverage and the complete function set are smaller than validator.js.
