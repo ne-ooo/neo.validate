@@ -63,6 +63,12 @@ describe('isNumeric', () => {
     expect(isNumeric('Infinity')).toBe(false)
     expect(isNumeric('-Infinity')).toBe(false)
   })
+
+  it('should preserve exact integer syntax and range comparisons', () => {
+    expect(isNumeric('9'.repeat(400))).toBe(true)
+    expect(isNumeric('9007199254740993', { max: 9007199254740992 })).toBe(false)
+    expect(isNumeric('-9007199254740993', { min: -9007199254740992 })).toBe(false)
+  })
 })
 
 describe('isInt', () => {
@@ -109,6 +115,20 @@ describe('isInt', () => {
     expect(isInt(123 as any)).toBe(false)
     expect(isInt(null as any)).toBe(false)
   })
+
+  it('should compare large integers without Number precision loss', () => {
+    expect(isInt('9'.repeat(400))).toBe(true)
+    expect(isInt('9007199254740993', { max: 9007199254740992 })).toBe(false)
+    expect(isInt('9007199254740992', { max: 9007199254740992 })).toBe(true)
+  })
+
+  it('should match integer range properties across a deterministic sample', () => {
+    for (let value = -250; value <= 250; value++) {
+      expect(isInt(String(value), { min: -100, max: 100 })).toBe(
+        value >= -100 && value <= 100
+      )
+    }
+  })
 })
 
 describe('isFloat', () => {
@@ -141,10 +161,19 @@ describe('isFloat', () => {
     expect(isFloat('12.5', { locale: 'de-DE' })).toBe(false)
   })
 
+  it('should use the decimal separator for the selected locale', () => {
+    expect(isFloat('12.5', { locale: 'ja-JP' })).toBe(true)
+    expect(isFloat('12,5', { locale: 'ja-JP' })).toBe(false)
+    expect(isFloat('12٫5', { locale: 'ar-EG' })).toBe(true)
+    expect(isFloat('12.5', { locale: 'invalid_locale' })).toBe(false)
+  })
+
   it('should validate with range options', () => {
     expect(isFloat('5.5', { min: 1, max: 10 })).toBe(true)
     expect(isFloat('0.5', { min: 1, max: 10 })).toBe(false)
     expect(isFloat('10.5', { min: 1, max: 10 })).toBe(false)
+    expect(isFloat('0.00000000000000000001', { gt: 0 })).toBe(true)
+    expect(isFloat('-0.00000000000000000001', { lt: 0 })).toBe(true)
   })
 
   it('should reject non-string values', () => {
@@ -187,5 +216,14 @@ describe('isDecimal', () => {
     expect(isDecimal(null as any)).toBe(false)
     expect(isDecimal(undefined as any)).toBe(false)
     expect(isDecimal(12.5 as any)).toBe(false)
+  })
+
+  it('should reject malformed option values without throwing', () => {
+    expect(isNumeric('1', null as any)).toBe(false)
+    expect(isInt('1', null as any)).toBe(false)
+    expect(isFloat('1', null as any)).toBe(false)
+    expect(isDecimal('1.0', null as any)).toBe(false)
+    expect(isNumeric('1', { min: Number.NaN })).toBe(false)
+    expect(isFloat('1', { locale: null } as any)).toBe(false)
   })
 })

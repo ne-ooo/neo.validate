@@ -21,7 +21,9 @@ const HTML_ESCAPE_PATTERN = /[&<>"'/]/g
 const HTML_UNESCAPE_PATTERN = /&amp;|&lt;|&gt;|&quot;|&#x27;|&#x2F;|&#39;/g
 
 /**
- * Escape HTML entities to prevent XSS attacks
+ * Escape characters for HTML text and quoted HTML attribute values
+ *
+ * This function does not make JavaScript, CSS, or URL values safe.
  *
  * @param str - String to escape
  * @returns Escaped string

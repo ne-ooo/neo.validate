@@ -240,8 +240,8 @@ if (isJWT(token)) {
 Correct:
 
 ```typescript
-// isJWT checks format: 3 base64url parts separated by dots
-isJWT('eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature')  // true
+// isJWT checks Base64URL and JSON structure
+isJWT('eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl')  // true
 isJWT('not.a.jwt.at.all')  // false
 isJWT('invalidtoken')       // false
 
@@ -259,7 +259,9 @@ try {
 // - Logging/debugging (identifying token format)
 ```
 
-`isJWT` only validates the structural format (three base64url-encoded segments separated by dots). It does not verify the cryptographic signature, check expiration, or validate claims. Always use a proper JWT library for authentication.
+`isJWT` checks three Base64URL segments, the JSON objects, and the `alg` header. It does not check the signature or claims.
+
+Use a JWT library for authentication.
 
 Source: `src/validators/identifier.ts` — format check only, no crypto
 
@@ -335,3 +337,49 @@ normalizeEmail(email, {
 Email normalization is for duplicate detection and comparison, not for storing the canonical delivery address. Gmail ignores dots, but other providers may not. Always keep the original address for actual email delivery.
 
 Source: `src/sanitizers/normalize.ts` — provider-specific transformations
+
+### [HIGH] HTML escaping is context-specific
+
+Wrong:
+
+```typescript
+const href = escape(userInput)
+// A javascript: URL is unchanged.
+```
+
+Correct:
+
+```typescript
+// Use escape only for HTML text or a quoted HTML attribute.
+const text = escape(userInput)
+
+// Use a URL policy before a value enters href or src.
+const safeUrl = isURL(userInput, { protocols: ['https'] }) ? userInput : '#'
+```
+
+WARNING: Do not use `escape` for JavaScript, CSS, URL, or unquoted HTML attribute values. An injection attack can occur.
+
+Source: `src/sanitizers/escape.ts` — HTML character encoding only
+
+### [HIGH] URL validation is not an SSRF control
+
+Wrong:
+
+```typescript
+if (isURL(userInput)) {
+  await fetch(userInput)
+}
+```
+
+Correct:
+
+```typescript
+// Use an exact host allowlist when the destination set is known.
+if (isURL(userInput, { protocols: ['https'], allowedHosts: ['api.example.com'] })) {
+  await fetch(userInput)
+}
+```
+
+DNS changes and redirects can reach a prohibited address after validation. Check the resolved address and each redirect before a request.
+
+Source: `src/validators/url.ts` — syntax and host policy checks only

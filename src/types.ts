@@ -7,6 +7,8 @@ export type ValidatorResult = boolean
  * Email validation options
  */
 export interface EmailOptions {
+  /** Maximum input length in UTF-16 code units (default: 254) */
+  maxLength?: number
   /** Allow display name (e.g., "John Doe <john@example.com>") */
   allowDisplayName?: boolean
   /** Require display name */
@@ -27,6 +29,8 @@ export interface EmailOptions {
  * URL validation options
  */
 export interface URLOptions {
+  /** Maximum input length in UTF-16 code units (default: 2084) */
+  maxLength?: number
   /** Allowed protocols (default: ['http', 'https', 'ftp']) */
   protocols?: string[]
   /** Require protocol in URL */
@@ -97,6 +101,22 @@ export interface LengthOptions {
 export interface Base64Options {
   /** Use URL-safe Base64 encoding */
   urlSafe?: boolean
+}
+
+/**
+ * JSON validation options
+ */
+export interface JSONOptions {
+  /** Maximum input length in UTF-16 code units (default: 1,048,576) */
+  maxLength?: number
+}
+
+/**
+ * JWT validation options
+ */
+export interface JWTOptions {
+  /** Maximum input length in UTF-16 code units (default: 8192) */
+  maxLength?: number
 }
 
 /**

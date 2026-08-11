@@ -137,6 +137,24 @@ describe('isURL', () => {
       ).toBe(true)
     })
 
+    it('should canonicalize host policy values', () => {
+      expect(isURL('http://example.com./', { disallowedHosts: ['example.com'] })).toBe(false)
+      expect(isURL('http://例え.jp/', { disallowedHosts: ['例え.jp'] })).toBe(false)
+      expect(isURL('http://[::1]/', { disallowedHosts: ['::1'] })).toBe(false)
+      expect(isURL('http://example.com./', { allowedHosts: ['example.com'] })).toBe(true)
+      expect(isURL('http://例え.jp/', { allowedHosts: ['例え.jp'] })).toBe(true)
+      expect(isURL('http://[::1]/', { allowedHosts: ['::1'] })).toBe(true)
+    })
+
+    it('should reject invalid host policy entries instead of failing open', () => {
+      expect(
+        isURL('http://example.com', { disallowedHosts: [null] } as any)
+      ).toBe(false)
+      expect(
+        isURL('http://example.com', { disallowedHosts: ['example.com/path'] })
+      ).toBe(false)
+    })
+
     it('should enforce all restrictions for URLs without a protocol', () => {
       expect(
         isURL('evil.com', { requireProtocol: false, allowedHosts: ['good.com'] })
@@ -198,6 +216,12 @@ describe('isURL', () => {
     it('should handle very long URLs', () => {
       const longPath = '/path/' + 'a'.repeat(1000)
       expect(isURL(`http://example.com${longPath}`)).toBe(true)
+    })
+
+    it('should reject input above the default limit before parsing', () => {
+      const oversized = `https://example.com/${'a'.repeat(2084)}`
+      expect(isURL(oversized)).toBe(false)
+      expect(isURL(oversized, { maxLength: oversized.length })).toBe(true)
     })
   })
 })

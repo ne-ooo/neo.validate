@@ -95,6 +95,9 @@ describe('trim', () => {
     // @ts-expect-error intentional wrong type
     expect(trim(null)).toBe('')
   })
+  it('returns empty string for malformed custom characters', () => {
+    expect(trim('hello', null as any)).toBe('')
+  })
 })
 
 describe('ltrim', () => {
@@ -159,6 +162,13 @@ describe('normalizeEmail', () => {
         'test.user@gmail.com'
       )
     })
+    it('keeps Googlemail transformations independent from domain conversion', () => {
+      expect(
+        normalizeEmail('Test.User+tag@googlemail.com', {
+          gmailConvertGooglemail: false,
+        })
+      ).toBe('testuser@googlemail.com')
+    })
   })
 
   describe('Outlook normalization', () => {
@@ -190,6 +200,10 @@ describe('normalizeEmail', () => {
       expect(normalizeEmail('a@b@c')).toBe('a@b@c')
       expect(normalizeEmail('@example.com')).toBe('@example.com')
       expect(normalizeEmail('user@')).toBe('user@')
+    })
+    it('returns a string for malformed runtime inputs', () => {
+      expect(normalizeEmail(null as any)).toBe('')
+      expect(normalizeEmail('user@example.com', null as any)).toBe('user@example.com')
     })
   })
 })
@@ -226,5 +240,8 @@ describe('stripLow', () => {
   it('returns empty string for non-string input', () => {
     // @ts-expect-error intentional wrong type
     expect(stripLow(null)).toBe('')
+  })
+  it('returns empty string for a malformed keepNewLines option', () => {
+    expect(stripLow('hello', 'yes' as any)).toBe('')
   })
 })

@@ -120,6 +120,18 @@ describe('isEmail', () => {
       ).toBe(true)
     })
 
+    it('should validate quoted display-name escapes', () => {
+      expect(
+        isEmail('"Alice \\"Example\\"" <alice@example.com>', { allowDisplayName: true })
+      ).toBe(true)
+      expect(
+        isEmail('"Alice "Example"" <alice@example.com>', { allowDisplayName: true })
+      ).toBe(false)
+      expect(
+        isEmail('"Alice\\" <alice@example.com>', { allowDisplayName: true })
+      ).toBe(false)
+    })
+
     it('should compare host restrictions case-insensitively', () => {
       expect(
         isEmail('user@EXAMPLE.COM', { hostWhitelist: ['example.com'] })
@@ -206,6 +218,12 @@ describe('isEmail', () => {
 
     it('should enforce the local-part byte limit', () => {
       expect(isEmail(`${'a'.repeat(65)}@example.com`)).toBe(false)
+    })
+
+    it('should enforce the configurable total-input limit', () => {
+      const email = `Alice ${'a'.repeat(240)} <alice@example.com>`
+      expect(isEmail(email, { allowDisplayName: true })).toBe(false)
+      expect(isEmail(email, { allowDisplayName: true, maxLength: email.length })).toBe(true)
     })
   })
 })

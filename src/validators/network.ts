@@ -39,6 +39,8 @@ export function isIP(str: string, version?: 4 | 6): boolean {
     return isIPv6(str)
   }
 
+  if (version !== undefined) return false
+
   // Both versions allowed
   return isIPv4(str) || isIPv6(str)
 }
@@ -81,12 +83,16 @@ export function isMACAddress(str: string, options: MACAddressOptions = {}): bool
     return false
   }
 
+  if (!options || typeof options !== 'object') return false
   const {
     noSeparator = false,
     allowColon = true,
     allowHyphen = true,
     allowDot = false,
   } = options
+  if (![noSeparator, allowColon, allowHyphen, allowDot].every((value) => typeof value === 'boolean')) {
+    return false
+  }
 
   // No separator (12 hex characters)
   if (noSeparator) {

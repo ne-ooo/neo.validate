@@ -1,3 +1,6 @@
+import type { JWTOptions } from '../types.js'
+import { isBase64 } from './format.js'
+
 const UUID_PATTERNS = {
   1: /^[0-9a-f]{8}-[0-9a-f]{4}-1[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
   3: /^[0-9a-f]{8}-[0-9a-f]{4}-3[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
@@ -12,6 +15,8 @@ const ISBN10_PATTERN = /^[0-9]{9}[0-9X]$/i
 const ISBN13_PATTERN = /^[0-9]{13}$/
 const MONGO_ID_PATTERN = /^[0-9a-f]{24}$/i
 const BASE64_URL_PATTERN = /^[A-Za-z0-9_-]+$/
+const DEFAULT_MAX_JWT_LENGTH = 8192
+const utf8Decoder = new TextDecoder('utf-8', { fatal: true })
 
 /**
  * Check if string is a valid UUID
@@ -55,12 +60,14 @@ export function isUUID(str: string, version?: 1 | 3 | 4 | 5): boolean {
  * ```
  */
 export function isISBN(str: string, version?: 10 | 13): boolean {
-  if (typeof str !== 'string' || str.length === 0) {
+  if (typeof str !== 'string' || str.length === 0 || str.length > 32) {
     return false
   }
 
   // Remove hyphens and spaces
   const sanitized = str.replace(ISBN_SEPARATOR_PATTERN, '')
+
+  if (version !== undefined && version !== 10 && version !== 13) return false
 
   if (version === 10) {
     return isISBN10(sanitized)
@@ -135,6 +142,7 @@ export function isMongoId(str: string): boolean {
  * Check if string is a valid JSON Web Token (JWT)
  *
  * @param str - String to validate
+ * @param options - JWT validation options
  * @returns true if valid JWT structure, false otherwise
  *
  * @example
@@ -143,10 +151,14 @@ export function isMongoId(str: string): boolean {
  * isJWT('invalid.token') // false
  * ```
  */
-export function isJWT(str: string): boolean {
+export function isJWT(str: string, options: JWTOptions = {}): boolean {
   if (typeof str !== 'string' || str.length === 0) {
     return false
   }
+
+  if (!options || typeof options !== 'object') return false
+  const { maxLength = DEFAULT_MAX_JWT_LENGTH } = options
+  if (!isPositiveInteger(maxLength) || str.length > maxLength) return false
 
   // JWT has 3 parts separated by dots
   const parts = str.split('.')
@@ -154,6 +166,35 @@ export function isJWT(str: string): boolean {
     return false
   }
 
-  // Each part should be base64url encoded (alphanumeric, -, _)
-  return parts.every((part) => BASE64_URL_PATTERN.test(part))
+  if (
+    !parts.every(
+      (part) => BASE64_URL_PATTERN.test(part) && isBase64(part, { urlSafe: true })
+    )
+  ) {
+    return false
+  }
+
+  const header = decodeJsonObject(parts[0]!)
+  const payload = decodeJsonObject(parts[1]!)
+  return Boolean(header && payload && typeof header.alg === 'string' && header.alg.length > 0)
+}
+
+function decodeJsonObject(segment: string): Record<string, unknown> | null {
+  const padding = '='.repeat((4 - (segment.length % 4)) % 4)
+  const encoded = segment.replace(/-/g, '+').replace(/_/g, '/') + padding
+
+  try {
+    const binary = atob(encoded)
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+    const value: unknown = JSON.parse(utf8Decoder.decode(bytes))
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null
+  } catch {
+    return null
+  }
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 }

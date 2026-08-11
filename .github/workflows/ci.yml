@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+env:
+  LPM_VERSION: "0.74.1"
+  LPM_INSTALLER_SHA256: "82776d71eac5201349617303a960b88f0f1d2d249fe07c758d3b1162e362434f"
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -20,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['18', '20', '22']
+        node: ['18', '20', '22', '24']
 
     steps:
       - name: Check out the repository
@@ -33,9 +37,10 @@ jobs:
 
       - name: Install LPM CLI
         env:
-          LPM_INSTALL_VERSION: v0.73.0
+          LPM_INSTALL_VERSION: v${{ env.LPM_VERSION }}
         run: |
-          curl --fail --silent --show-error --location https://cli.lpm.dev/install --output "$RUNNER_TEMP/install-lpm.sh"
+          curl --fail --silent --show-error --location "https://raw.githubusercontent.com/lpm-dev/rust-client/v${LPM_VERSION}/install.sh" --output "$RUNNER_TEMP/install-lpm.sh"
+          echo "${LPM_INSTALLER_SHA256}  $RUNNER_TEMP/install-lpm.sh" | sha256sum --check --strict
           sh "$RUNNER_TEMP/install-lpm.sh"
           echo "$HOME/.lpm/bin" >> "$GITHUB_PATH"
           "$HOME/.lpm/bin/lpm" --version
@@ -56,7 +61,7 @@ jobs:
         run: lpm ci --strict-integrity --no-skills --no-editor-setup --no-security-summary
 
       - name: Run compatibility checks
-        if: matrix.node != '22'
+        if: matrix.node != '24'
         run: |
           lpm run typecheck
           lpm run test
@@ -64,9 +69,9 @@ jobs:
           lpm run test:package
 
       - name: Run the release check
-        if: matrix.node == '22'
+        if: matrix.node == '24'
         run: lpm run release:check
 
       - name: Check the publish package
-        if: matrix.node == '22'
+        if: matrix.node == '24'
         run: lpm publish --check --yes

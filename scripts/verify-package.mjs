@@ -51,7 +51,7 @@ function resolvePackagePath(path) {
 }
 
 function assertPublishedFilesExist() {
-  const requiredFiles = ['README.md', 'BENCHMARKS.md', 'CHANGELOG.md', 'LICENSE']
+  const requiredFiles = ['README.md', 'SECURITY.md', 'BENCHMARKS.md', 'CHANGELOG.md', 'LICENSE']
   for (const file of requiredFiles) {
     assert.ok(manifest.files.includes(file), `${file} is missing from package.json files`)
     assert.ok(existsSync(resolve(packageRoot, file)), `${file} does not exist`)
@@ -92,8 +92,14 @@ function assertRuntime(module, format) {
     module.isURL('evil.com', { requireProtocol: false, allowedHosts: ['good.com'] }),
     false
   )
+  assert.equal(
+    module.isURL('http://example.com./', { disallowedHosts: ['example.com'] }),
+    false
+  )
   assert.equal(module.isBase64('A='), false)
   assert.equal(module.isLength('😀', { min: 1, max: 1 }), true)
+  assert.equal(module.isInt('9007199254740993', { max: 9007199254740992 }), false)
+  assert.equal(module.isJWT('a.a.a'), false)
   assert.equal(module.normalizeEmail('a@b@c'), 'a@b@c')
 }
 

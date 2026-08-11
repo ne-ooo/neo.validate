@@ -3,10 +3,11 @@ import type { CreditCardOptions, CreditCardProvider } from '../types.js'
 const cardPatterns: Record<CreditCardProvider, RegExp> = {
   amex: /^3[47][0-9]{13}$/,
   dinersclub: /^3(?:0[0-5]|[68][0-9])[0-9]{11}$/,
-  discover: /^6(?:011|5[0-9]{2})[0-9]{12,15}$/,
-  jcb: /^(?:2131|1800|35[0-9]{3})[0-9]{11}$/,
+  discover:
+    /^6(?:011[0-9]{12,15}|5[0-9]{14,17}|4[4-9][0-9]{13,16}|22(?:12[6-9]|1[3-9][0-9]|[2-8][0-9]{2}|9(?:[01][0-9]|2[0-5]))[0-9]{10,13})$/,
+  jcb: /^(?:(?:2131|1800)[0-9]{11}|35(?:2[89]|[3-8][0-9])[0-9]{12,15})$/,
   mastercard: /^(?:5[1-5][0-9]{14}|(?:222[1-9]|22[3-9][0-9]|2[3-6][0-9]{2}|27[01][0-9]|2720)[0-9]{12})$/,
-  unionpay: /^(?:6[27][0-9]{14}|81[0-9]{14,17})$/,
+  unionpay: /^(?:62[0-9]{14,17}|81[0-9]{14,17})$/,
   visa: /^4[0-9]{12}(?:[0-9]{3,6})?$/,
 }
 
@@ -34,7 +35,16 @@ const CARD_DIGITS_PATTERN = /^[0-9]{13,19}$/
  * ```
  */
 export function isCreditCard(str: string, options: CreditCardOptions = {}): boolean {
-  if (typeof str !== 'string' || str.length === 0) {
+  if (typeof str !== 'string' || str.length === 0 || str.length > 64) {
+    return false
+  }
+
+  if (!options || typeof options !== 'object') return false
+  const { provider } = options
+  if (
+    provider !== undefined &&
+    !Object.prototype.hasOwnProperty.call(cardPatterns, provider)
+  ) {
     return false
   }
 
@@ -46,9 +56,8 @@ export function isCreditCard(str: string, options: CreditCardOptions = {}): bool
     return false
   }
 
-  const { provider } = options
   const matchesProvider = provider
-    ? cardPatterns[provider]?.test(sanitized) === true
+    ? cardPatterns[provider].test(sanitized)
     : supportedCardPatterns.some((pattern) => pattern.test(sanitized))
   if (!matchesProvider) return false
 

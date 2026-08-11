@@ -48,7 +48,7 @@ isEmail('user@allowed.com', { hostWhitelist: ['allowed.com'] }) // true
 isEmail('用户@example.com', { allowUtf8LocalPart: true })       // true (default)
 ```
 
-**EmailOptions**: `allowDisplayName`, `requireDisplayName`, `allowUtf8LocalPart` (default: true), `requireTld` (default: true), `blacklistedChars`, `hostBlacklist`, `hostWhitelist`
+**EmailOptions**: `maxLength` (default: 254), `allowDisplayName`, `requireDisplayName`, `allowUtf8LocalPart`, `requireTld`, `blacklistedChars`, `hostBlacklist`, `hostWhitelist`
 
 ## URL Validation
 
@@ -68,7 +68,9 @@ isURL('data:text/html,...', { allowDataUrl: true })         // true
 isURL('https://example.com:8080', { requirePort: true })   // true
 ```
 
-**URLOptions**: `protocols` (default: ['http', 'https', 'ftp']), `requireProtocol` (default: true), `requireHost` (default: true), `requirePort`, `allowQueryComponents` (default: true), `allowFragments` (default: true), `allowDataUrl` (default: false), `allowedHosts`, `disallowedHosts`
+**URLOptions**: `maxLength` (default: 2084), `protocols`, `requireProtocol`, `requireHost`, `requirePort`, `allowQueryComponents`, `allowFragments`, `allowDataUrl`, `allowedHosts`, `disallowedHosts`
+
+`isURL` checks syntax. It does not make a URL safe to open, redirect to, or fetch.
 
 ## Numeric Validators
 
@@ -104,7 +106,7 @@ isFloat('5.5', { gt: 0, lt: 10 })    // true (exclusive bounds)
 
 **NumericOptions**: `min`, `max` (inclusive), `gt`, `lt` (exclusive)
 **IntOptions**: extends NumericOptions + `allowLeadingZeroes` (default: false)
-**FloatOptions**: extends NumericOptions + `locale` (decimal separator)
+**FloatOptions**: extends NumericOptions + `locale` (decimal separator from `Intl.NumberFormat`)
 
 ## String Validators
 
@@ -128,6 +130,8 @@ isAscii('Héllo')                  // false
 isLowercase('hello')              // true
 isUppercase('HELLO')              // true
 ```
+
+The locale selects a Unicode script. English locales use ASCII letters. An unsupported locale returns `false`.
 
 ## Network Validators
 
@@ -158,6 +162,7 @@ isPort('65536')  // false (> 65535)
 import { isJSON, isBase64, isHexadecimal, isHexColor, isISO8601, isRFC3339 } from '@lpm.dev/neo.validate'
 
 isJSON('{"key":"value"}')         // true
+isJSON('{"key":"value"}', { maxLength: 1024 })  // true
 isJSON('{invalid}')               // false
 
 isBase64('SGVsbG8=')              // true
@@ -174,6 +179,8 @@ isRFC3339('2024-01-15T10:30:00Z')          // true (strict)
 isRFC3339('2024-01-15')                    // false (requires time)
 ```
 
+`isISO8601` supports calendar dates and date-times with seconds. It does not support every ISO 8601 representation.
+
 ## Identifier Validators
 
 ```typescript
@@ -187,8 +194,10 @@ isISBN('0-306-40615-2', 10)       // true (validates checksum)
 
 isMongoId('507f1f77bcf86cd799439011')  // true (24 hex chars)
 
-isJWT('eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abc123')  // true (format only)
+isJWT('eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl')  // true
 ```
+
+`isJWT` checks the encoded JSON structure. It does not check the signature, expiry, issuer, audience, or claims.
 
 ## Credit Card Validation
 
@@ -204,7 +213,7 @@ The function validates a supported issuer pattern and the Luhn checksum. The opt
 
 ## Sanitizers
 
-### HTML Escaping (XSS Prevention)
+### HTML escaping
 
 ```typescript
 import { escape, unescape } from '@lpm.dev/neo.validate'
@@ -217,6 +226,8 @@ unescape('&lt;b&gt;bold&lt;&#x2F;b&gt;')
 ```
 
 Escapes: `&` `<` `>` `"` `'` `/`
+
+WARNING: Do not use `escape` for JavaScript, CSS, URL, or unquoted HTML attribute values. An injection attack can occur.
 
 ### Trimming
 
@@ -265,6 +276,8 @@ import type {
   FloatOptions,
   LengthOptions,
   Base64Options,
+  JSONOptions,
+  JWTOptions,
   MACAddressOptions,
   NormalizeEmailOptions,
 } from '@lpm.dev/neo.validate'

@@ -21,6 +21,7 @@
     "dist",
     ".lpm",
     "README.md",
+    "SECURITY.md",
     "BENCHMARKS.md",
     "CHANGELOG.md",
     "LICENSE"

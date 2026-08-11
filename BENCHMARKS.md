@@ -27,6 +27,7 @@ The suite covers these operations:
 - JSON and Base64 validation
 - HTML escaping and email normalization
 - Batches of 100 email, URL, and numeric validations
+- Early rejection of oversized string, email, and URL input
 
 The benchmark source is in `test/benchmarks/comparison.bench.ts`.
 

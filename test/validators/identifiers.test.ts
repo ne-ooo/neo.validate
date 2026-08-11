@@ -104,6 +104,9 @@ describe('isISBN', () => {
     it('rejects short number', () => {
       expect(isISBN('12345')).toBe(false)
     })
+    it('rejects an unsupported runtime version', () => {
+      expect(isISBN('9780596520687', 99 as any)).toBe(false)
+    })
   })
 })
 
@@ -141,8 +144,24 @@ describe('isJWT', () => {
     expect(isJWT(jwt)).toBe(true)
   })
   it('accepts JWT with URL-safe base64url chars (- and _)', () => {
-    const jwt = 'aGVhZGVy.cGF5bG9hZA.c2lnbmF0dXJl-X_Y'
+    const jwt =
+      'eyJhbGciOiJIUzI1NiJ9.eyJkYXRhIjoiXy0ifQ.c2lnbmF0dXJl-X_Y'
     expect(isJWT(jwt)).toBe(true)
+  })
+  it('rejects non-JSON and non-canonical Base64URL segments', () => {
+    expect(isJWT('a.a.a')).toBe(false)
+    expect(isJWT('aGVhZGVy.cGF5bG9hZA.c2lnbmF0dXJl')).toBe(false)
+  })
+  it('requires JSON objects and an algorithm header', () => {
+    expect(isJWT('e30.e30.c2lnbmF0dXJl')).toBe(false)
+    expect(isJWT('WyJIUzI1NiJd.e30.c2lnbmF0dXJl')).toBe(false)
+  })
+  it('enforces the configurable token limit', () => {
+    const jwt =
+      'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.c2lnbmF0dXJl'
+    expect(isJWT(jwt, { maxLength: jwt.length - 1 })).toBe(false)
+    expect(isJWT(jwt, { maxLength: jwt.length })).toBe(true)
+    expect(isJWT(jwt, null as any)).toBe(false)
   })
   it('rejects two-part token', () => {
     expect(isJWT('header.payload')).toBe(false)

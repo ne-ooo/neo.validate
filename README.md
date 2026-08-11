@@ -39,6 +39,7 @@ isEmail("not-an-email"); // false
 isEmail("user@example.com", {
   allowDisplayName: true, // "Name <user@example.com>"
   requireTld: true, // require TLD (default: true)
+  maxLength: 254, // total input limit (default: 254)
 });
 ```
 
@@ -55,6 +56,7 @@ isURL("https://example.com", {
   protocols: ["https"], // restrict allowed protocols
   requireProtocol: true, // require protocol prefix
   requireTld: true, // require TLD
+  maxLength: 2084, // total input limit (default: 2084)
 });
 ```
 
@@ -93,6 +95,8 @@ isLowercase("hello"); // true
 isUppercase("HELLO"); // true
 ```
 
+The locale selects a Unicode script. English locales use ASCII letters. An unsupported locale returns `false`.
+
 ### Network
 
 ```typescript
@@ -119,6 +123,7 @@ import {
 } from "@lpm.dev/neo.validate";
 
 isJSON('{"key":"value"}'); // true
+isJSON('{"key":"value"}', { maxLength: 1024 }); // true
 isBase64("SGVsbG8="); // true
 isHexadecimal("deadbeef"); // true
 isHexColor("#ff0000"); // true
@@ -126,6 +131,8 @@ isHexColor("#f00"); // true
 isISO8601("2024-01-15T10:30:00Z"); // true
 isRFC3339("2024-01-15T10:30:00Z"); // true
 ```
+
+`isISO8601` supports calendar dates and date-times with seconds. It does not support every ISO 8601 representation.
 
 ### Identifiers
 
@@ -136,8 +143,10 @@ isUUID("550e8400-e29b-41d4-a716-446655440000"); // true
 isUUID("550e8400-...", 4); // true (v4 only)
 isISBN("978-3-16-148410-0"); // true
 isMongoId("507f1f77bcf86cd799439011"); // true
-isJWT("eyJ..."); // true (format check)
+isJWT("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl"); // true
 ```
+
+`isJWT` checks the encoded JSON structure. It does not check the signature, expiry, issuer, audience, or claims.
 
 ### Credit Card
 
@@ -177,6 +186,16 @@ normalizeEmail("Hello+Tag@GMAIL.COM");
 
 stripLow("Hello\x00World"); // 'HelloWorld'
 ```
+
+`escape` is for HTML text and quoted HTML attributes. It is not an encoder for JavaScript, CSS, or URL values.
+
+## Security boundaries
+
+Validation does not make untrusted content safe for every use. Read [SECURITY.md](./SECURITY.md) before security-sensitive use.
+
+The URL validator does not provide complete SSRF protection. The JWT validator does not provide authentication.
+
+All validators return a boolean for malformed runtime arguments. All sanitizers return a string.
 
 ## Migration from validator.js
 
