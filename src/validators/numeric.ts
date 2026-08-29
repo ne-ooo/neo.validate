@@ -1,10 +1,13 @@
 import type { NumericOptions, IntOptions, FloatOptions } from '../types.js'
+import { INVALID_OPTION, readOwnDataOption } from '../options.js'
 
 const NUMERIC_PATTERN = /^[+-]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)$/
 const SIGNED_LEADING_ZERO_PATTERN = /^[+-]?0[0-9]/
 const INTEGER_PATTERN = /^[+-]?[0-9]+$/
 const DOT_FLOAT_PATTERN = /^[+-]?([0-9]*\.)?[0-9]+([eE][+-]?[0-9]+)?$/
-const decimalSeparatorCache = new Map<string, string>()
+const MAX_LOCALE_LENGTH = 128
+const MAX_DECIMAL_SEPARATOR_CACHE_ENTRIES = 32
+const decimalSeparatorCache = new Map<string, string | null>()
 
 /**
  * Check if string is numeric
@@ -26,9 +29,10 @@ export function isNumeric(str: string, options: NumericOptions = {}): boolean {
     return false
   }
 
-  if (!isNumericOptions(options) || !NUMERIC_PATTERN.test(str)) return false
+  const resolvedOptions = resolveNumericOptions(options)
+  if (!resolvedOptions || !NUMERIC_PATTERN.test(str)) return false
 
-  return isDecimalInRange(str, options)
+  return isDecimalInRange(str, resolvedOptions)
 }
 
 /**
@@ -51,8 +55,9 @@ export function isInt(str: string, options: IntOptions = {}): boolean {
     return false
   }
 
-  if (!isIntOptions(options)) return false
-  const { allowLeadingZeroes = false } = options
+  const resolvedOptions = resolveIntOptions(options)
+  if (!resolvedOptions) return false
+  const { allowLeadingZeroes } = resolvedOptions
 
   // Check for leading zeroes
   if (!allowLeadingZeroes && SIGNED_LEADING_ZERO_PATTERN.test(str)) {
@@ -63,7 +68,7 @@ export function isInt(str: string, options: IntOptions = {}): boolean {
     return false
   }
 
-  return isDecimalInRange(str, options)
+  return isDecimalInRange(str, resolvedOptions)
 }
 
 /**
@@ -86,8 +91,12 @@ export function isFloat(str: string, options: FloatOptions = {}): boolean {
     return false
   }
 
-  if (!isFloatOptions(options)) return false
-  const { locale = 'en-US' } = options
+  const resolvedOptions = resolveFloatOptions(options)
+  return resolvedOptions ? validateFloat(str, resolvedOptions) : false
+}
+
+function validateFloat(str: string, options: ResolvedFloatOptions): boolean {
+  const { locale } = options
 
   const decimalSeparator = getDecimalSeparator(locale)
   if (!decimalSeparator) return false
@@ -120,8 +129,9 @@ export function isDecimal(str: string, options: FloatOptions = {}): boolean {
     return false
   }
 
-  if (!isFloatOptions(options)) return false
-  const { locale = 'en-US' } = options
+  const resolvedOptions = resolveFloatOptions(options)
+  if (!resolvedOptions) return false
+  const { locale } = resolvedOptions
   const decimalSeparator = getDecimalSeparator(locale)
   if (!decimalSeparator) return false
 
@@ -129,10 +139,25 @@ export function isDecimal(str: string, options: FloatOptions = {}): boolean {
     return false
   }
 
-  return isFloat(str, options)
+  return validateFloat(str, resolvedOptions)
 }
 
-function isDecimalInRange(value: string, options: NumericOptions): boolean {
+interface ResolvedNumericOptions {
+  min?: number
+  max?: number
+  gt?: number
+  lt?: number
+}
+
+interface ResolvedIntOptions extends ResolvedNumericOptions {
+  allowLeadingZeroes: boolean
+}
+
+interface ResolvedFloatOptions extends ResolvedNumericOptions {
+  locale: string
+}
+
+function isDecimalInRange(value: string, options: ResolvedNumericOptions): boolean {
   if (!hasRange(options)) return true
   const parsedValue = parseDecimal(value)
   if (!parsedValue) return false
@@ -214,8 +239,13 @@ function compareMagnitudes(left: DecimalParts, right: DecimalParts): number {
 }
 
 function getDecimalSeparator(locale: string): string | null {
-  const cached = decimalSeparatorCache.get(locale)
-  if (cached) return cached
+  if (locale.length > MAX_LOCALE_LENGTH) return null
+  if (decimalSeparatorCache.has(locale)) {
+    const cached = decimalSeparatorCache.get(locale) ?? null
+    decimalSeparatorCache.delete(locale)
+    decimalSeparatorCache.set(locale, cached)
+    return cached
+  }
 
   let separator: string | undefined
   try {
@@ -223,16 +253,28 @@ function getDecimalSeparator(locale: string): string | null {
       .formatToParts(1.1)
       .find((part) => part.type === 'decimal')?.value
   } catch {
+    cacheDecimalSeparator(locale, null)
     return null
   }
 
-  if (!separator) return null
-  if (decimalSeparatorCache.size >= 32) decimalSeparatorCache.clear()
-  decimalSeparatorCache.set(locale, separator)
+  if (!separator) {
+    cacheDecimalSeparator(locale, null)
+    return null
+  }
+  cacheDecimalSeparator(locale, separator)
   return separator
 }
 
-function hasRange(options: NumericOptions): boolean {
+function cacheDecimalSeparator(locale: string, separator: string | null): void {
+  if (decimalSeparatorCache.has(locale)) decimalSeparatorCache.delete(locale)
+  if (decimalSeparatorCache.size >= MAX_DECIMAL_SEPARATOR_CACHE_ENTRIES) {
+    const oldestKey = decimalSeparatorCache.keys().next().value
+    if (oldestKey !== undefined) decimalSeparatorCache.delete(oldestKey)
+  }
+  decimalSeparatorCache.set(locale, separator)
+}
+
+function hasRange(options: ResolvedNumericOptions): boolean {
   return (
     options.min !== undefined ||
     options.max !== undefined ||
@@ -241,22 +283,33 @@ function hasRange(options: NumericOptions): boolean {
   )
 }
 
-function isNumericOptions(value: unknown): value is NumericOptions {
-  if (!value || typeof value !== 'object') return false
-  const { min, max, gt, lt } = value as NumericOptions
-  return [min, max, gt, lt].every(
+function resolveNumericOptions(value: unknown): ResolvedNumericOptions | null {
+  const min = readOwnDataOption(value, 'min', undefined)
+  const max = readOwnDataOption(value, 'max', undefined)
+  const gt = readOwnDataOption(value, 'gt', undefined)
+  const lt = readOwnDataOption(value, 'lt', undefined)
+  const bounds = [min, max, gt, lt]
+  if (
+    bounds.some((bound) => bound === INVALID_OPTION) ||
+    !bounds.every(
     (bound) => bound === undefined || (typeof bound === 'number' && Number.isFinite(bound))
-  )
+    )
+  ) {
+    return null
+  }
+  return { min, max, gt, lt } as ResolvedNumericOptions
 }
 
-function isIntOptions(value: unknown): value is IntOptions {
-  if (!isNumericOptions(value)) return false
-  const { allowLeadingZeroes } = value as IntOptions
-  return allowLeadingZeroes === undefined || typeof allowLeadingZeroes === 'boolean'
+function resolveIntOptions(value: unknown): ResolvedIntOptions | null {
+  const numericOptions = resolveNumericOptions(value)
+  const allowLeadingZeroes = readOwnDataOption(value, 'allowLeadingZeroes', false)
+  if (!numericOptions || typeof allowLeadingZeroes !== 'boolean') return null
+  return { ...numericOptions, allowLeadingZeroes }
 }
 
-function isFloatOptions(value: unknown): value is FloatOptions {
-  if (!isNumericOptions(value)) return false
-  const { locale } = value as FloatOptions
-  return locale === undefined || typeof locale === 'string'
+function resolveFloatOptions(value: unknown): ResolvedFloatOptions | null {
+  const numericOptions = resolveNumericOptions(value)
+  const locale = readOwnDataOption(value, 'locale', 'en-US')
+  if (!numericOptions || typeof locale !== 'string') return null
+  return { ...numericOptions, locale }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isEmail } from '../../src/validators/email.js'
+import { createEmailValidator, isEmail } from '../../src/validators/email.js'
 
 describe('isEmail', () => {
   describe('valid emails', () => {
@@ -132,6 +132,12 @@ describe('isEmail', () => {
       ).toBe(false)
     })
 
+    it('should reject malformed or repeated display-address delimiters', () => {
+      expect(isEmail('Alice <alice@example.com>>', { allowDisplayName: true })).toBe(false)
+      expect(isEmail('Alice <<alice@example.com>', { allowDisplayName: true })).toBe(false)
+      expect(isEmail('Alice > <alice@example.com>', { allowDisplayName: true })).toBe(false)
+    })
+
     it('should compare host restrictions case-insensitively', () => {
       expect(
         isEmail('user@EXAMPLE.COM', { hostWhitelist: ['example.com'] })
@@ -224,6 +230,73 @@ describe('isEmail', () => {
       const email = `Alice ${'a'.repeat(240)} <alice@example.com>`
       expect(isEmail(email, { allowDisplayName: true })).toBe(false)
       expect(isEmail(email, { allowDisplayName: true, maxLength: email.length })).toBe(true)
+    })
+
+    it('should reject a long malformed display address without regex backtracking', () => {
+      const malformed = `${' '.repeat(40_000)}>`
+      expect(
+        isEmail(malformed, { allowDisplayName: true, maxLength: malformed.length })
+      ).toBe(false)
+    })
+  })
+
+  describe('compiled validator', () => {
+    it('matches one-off validation with a reusable policy', () => {
+      const options = {
+        allowDisplayName: true,
+        hostWhitelist: ['example.com'],
+      }
+      const validate = createEmailValidator(options)
+
+      expect(validate('Alice <alice@example.com>')).toBe(
+        isEmail('Alice <alice@example.com>', options)
+      )
+      expect(validate('alice@other.com')).toBe(false)
+      expect(validate(null as any)).toBe(false)
+    })
+
+    it('snapshots mutable host policies', () => {
+      const hostWhitelist = ['example.com']
+      const hostBlacklist = ['spam.com']
+      const validate = createEmailValidator({ hostWhitelist, hostBlacklist })
+
+      hostWhitelist[0] = 'other.com'
+      hostBlacklist[0] = 'example.com'
+      hostWhitelist.push('spam.com')
+
+      expect(validate('user@example.com')).toBe(true)
+      expect(validate('user@other.com')).toBe(false)
+      expect(validate('user@spam.com')).toBe(false)
+    })
+
+    it('returns an always-false validator for invalid options', () => {
+      const malformed = createEmailValidator({ hostWhitelist: [null] } as any)
+      const accessorOptions = Object.defineProperty({}, 'requireTld', {
+        get() {
+          throw new Error('must not execute option accessors')
+        },
+      })
+      expect(malformed('user@example.com')).toBe(false)
+      expect(() => createEmailValidator(accessorOptions)).not.toThrow()
+      expect(createEmailValidator(accessorOptions)('user@example.com')).toBe(false)
+    })
+
+    it('fails closed for hostile or excessive policy arrays', () => {
+      const hostileHosts = new Proxy(['example.com'], {
+        getOwnPropertyDescriptor(target, key) {
+          if (key === 'length') throw new Error('hostile array descriptor')
+          return Reflect.getOwnPropertyDescriptor(target, key)
+        },
+      })
+      expect(() => createEmailValidator({ hostWhitelist: hostileHosts })).not.toThrow()
+      expect(
+        createEmailValidator({ hostWhitelist: hostileHosts })('user@example.com')
+      ).toBe(false)
+      expect(
+        createEmailValidator({ hostWhitelist: Array(10_001).fill('example.com') })(
+          'user@example.com'
+        )
+      ).toBe(false)
     })
   })
 })

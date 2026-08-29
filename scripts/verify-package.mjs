@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
@@ -9,8 +10,19 @@ const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const manifestPath = resolve(packageRoot, 'package.json')
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
 const require = createRequire(import.meta.url)
+const expectedPublishedPaths = [
+  '.lpm/skills',
+  'BENCHMARKS.md',
+  'CHANGELOG.md',
+  'LICENSE',
+  'README.md',
+  'SECURITY.md',
+  'dist',
+]
 
 const expectedFunctions = [
+  'createEmailValidator',
+  'createURLValidator',
   'escape',
   'isAlpha',
   'isAlphanumeric',
@@ -51,6 +63,11 @@ function resolvePackagePath(path) {
 }
 
 function assertPublishedFilesExist() {
+  assert.deepEqual(
+    [...manifest.files].sort(),
+    [...expectedPublishedPaths].sort(),
+    'package.json files must use the reviewed publish allowlist'
+  )
   const requiredFiles = ['README.md', 'SECURITY.md', 'BENCHMARKS.md', 'CHANGELOG.md', 'LICENSE']
   for (const file of requiredFiles) {
     assert.ok(manifest.files.includes(file), `${file} is missing from package.json files`)
@@ -58,14 +75,35 @@ function assertPublishedFilesExist() {
   }
 
   for (const [subpath, target] of Object.entries(manifest.exports)) {
-    if (typeof target === 'string') {
-      assert.ok(existsSync(resolvePackagePath(target)), `${subpath} export does not exist`)
-      continue
-    }
+    assertExportTargetsExist(target, subpath)
+  }
+}
 
-    for (const [format, path] of Object.entries(target)) {
-      assert.ok(existsSync(resolvePackagePath(path)), `${subpath} ${format} export does not exist`)
-    }
+function assertExportTargetsExist(target, label) {
+  if (typeof target === 'string') {
+    assert.ok(existsSync(resolvePackagePath(target)), `${label} export does not exist`)
+    return
+  }
+
+  assert.ok(target && typeof target === 'object', `${label} export target is invalid`)
+  for (const [condition, nestedTarget] of Object.entries(target)) {
+    assertExportTargetsExist(nestedTarget, `${label} ${condition}`)
+  }
+}
+
+function assertTypeScriptConsumersCompile() {
+  const fixtureConfig = resolve(packageRoot, 'scripts/fixtures/package-consumers/tsconfig.json')
+  const tscPath = require.resolve('typescript/bin/tsc')
+
+  try {
+    execFileSync(process.execPath, [tscPath, '--project', fixtureConfig], {
+      cwd: packageRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+  } catch (error) {
+    const output = [error.stdout, error.stderr].filter(Boolean).join('\n')
+    assert.fail(`TypeScript package-consumer fixtures failed:\n${output}`)
   }
 }
 
@@ -101,6 +139,26 @@ function assertRuntime(module, format) {
   assert.equal(module.isInt('9007199254740993', { max: 9007199254740992 }), false)
   assert.equal(module.isJWT('a.a.a'), false)
   assert.equal(module.normalizeEmail('a@b@c'), 'a@b@c')
+  assert.equal(
+    module.createEmailValidator({ hostWhitelist: ['example.com'] })('user@example.com'),
+    true
+  )
+  assert.equal(
+    module.createURLValidator({ protocols: ['https'] })('http://example.com'),
+    false
+  )
+  assert.equal(module.isUUID('019535d9-3df7-7a28-8a7f-9f4bc7c8e101', 7), true)
+  assert.equal(module.isUUID('550e8400-e29b-41d4-a716-446655440000', 4), true)
+  assert.equal(module.isUUID('550e8400-...'), false)
+}
+
+function assertDocumentationExamples() {
+  const readme = readFileSync(resolve(packageRoot, 'README.md'), 'utf8')
+  assert.equal(
+    readme.includes('isUUID("550e8400-...")'),
+    false,
+    'README must not present a truncated UUID as executable input'
+  )
 }
 
 function assertBundleBudget() {
@@ -118,6 +176,8 @@ function assertBundleBudget() {
 assert.equal(Object.keys(manifest.dependencies ?? {}).length, 0, 'Runtime dependencies are not allowed')
 assertPublishedFilesExist()
 assertSkillVersionsMatch()
+assertTypeScriptConsumersCompile()
+assertDocumentationExamples()
 
 const esmModule = await import(manifest.name)
 const cjsModule = require(manifest.name)

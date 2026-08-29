@@ -1,7 +1,9 @@
 import type { URLOptions } from '../types.js'
+import { copyOwnStringArray, INVALID_OPTION, readOwnDataOption } from '../options.js'
 
 const DATA_URL_PATTERN = /^data:/i
 const URL_PROTOCOL_PATTERN = /^[a-z][a-z\d+.-]*:\/\//i
+const UNSAFE_URL_INPUT_PATTERN = /[\\\x00-\x1F\x7F]/
 const AUTHORITY_END_PATTERN = /[/?#]/
 const BRACKETED_HOST_WITH_PORT_PATTERN = /^\[[^\]]+\]:\d+$/
 const HOST_WITH_PORT_PATTERN = /:\d+$/
@@ -9,6 +11,8 @@ const IPV4_PART_PATTERN = /^\d{1,3}$/
 const DNS_LABEL_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i
 const DNS_TLD_PATTERN = /^(?:[a-z]{2,63}|xn--[a-z0-9-]{2,59})$/i
 const DEFAULT_MAX_URL_LENGTH = 2084
+const DEFAULT_PROTOCOLS = ['http', 'https', 'ftp'] as const
+const ALWAYS_INVALID_URL = (_str: string): boolean => false
 
 /**
  * Validate a URL with the WHATWG URL parser and policy options
@@ -32,48 +36,40 @@ export function isURL(str: string, options: URLOptions = {}): boolean {
     return false
   }
 
-  if (!options || typeof options !== 'object') return false
+  const resolvedOptions = resolveUrlOptions(options)
+  return resolvedOptions ? validateURL(str, resolvedOptions) : false
+}
 
+/**
+ * Compile an immutable URL-validation policy for repeated use
+ *
+ * Invalid options produce a validator that always returns false.
+ */
+export function createURLValidator(options: URLOptions = {}): (str: string) => boolean {
+  const resolvedOptions = resolveUrlOptions(options)
+  return resolvedOptions
+    ? (str: string) => validateURL(str, resolvedOptions)
+    : ALWAYS_INVALID_URL
+}
+
+function validateURL(str: string, resolvedOptions: ResolvedUrlOptions): boolean {
+  if (typeof str !== 'string' || str.length === 0) return false
   const {
-    maxLength = DEFAULT_MAX_URL_LENGTH,
-    protocols = ['http', 'https', 'ftp'],
-    requireProtocol = true,
-    requireHost = true,
-    requireTld = false,
-    requirePort = false,
-    requireValidProtocol = true,
-    allowQueryComponents = true,
-    allowFragments = true,
-    allowDataUrl = false,
-    allowedHosts = [],
-    disallowedHosts = [],
-  } = options
+    maxLength,
+    protocols,
+    requireProtocol,
+    requireHost,
+    requireTld,
+    requirePort,
+    requireValidProtocol,
+    allowQueryComponents,
+    allowFragments,
+    allowDataUrl,
+    allowedHosts,
+    disallowedHosts,
+  } = resolvedOptions
 
-  if (
-    !isPositiveInteger(maxLength) ||
-    !Array.isArray(protocols) ||
-    !Array.isArray(allowedHosts) ||
-    !Array.isArray(disallowedHosts) ||
-    !protocols.every((protocol) => typeof protocol === 'string' && protocol.length > 0) ||
-    !areBooleanOptions([
-      requireProtocol,
-      requireHost,
-      requireTld,
-      requirePort,
-      requireValidProtocol,
-      allowQueryComponents,
-      allowFragments,
-      allowDataUrl,
-    ])
-  ) {
-    return false
-  }
-
-  if (str.length > maxLength) return false
-
-  const normalizedAllowedHosts = normalizeHostList(allowedHosts)
-  const normalizedDisallowedHosts = normalizeHostList(disallowedHosts)
-  if (!normalizedAllowedHosts || !normalizedDisallowedHosts) return false
+  if (str.length > maxLength || UNSAFE_URL_INPUT_PATTERN.test(str)) return false
 
   const isDataUrl = DATA_URL_PATTERN.test(str)
   const hasProtocol = URL_PROTOCOL_PATTERN.test(str)
@@ -93,16 +89,17 @@ export function isURL(str: string, options: URLOptions = {}): boolean {
   }
 
   const protocol = url.protocol.slice(0, -1).toLowerCase()
+  const { hasQueryComponent, hasFragmentComponent } = getUrlComponentPresence(url)
 
   if (protocol === 'data') {
     if (!allowDataUrl) return false
-    if (normalizedAllowedHosts.length > 0) return false
-    if (!allowQueryComponents && url.search) return false
-    if (!allowFragments && url.hash) return false
+    if (allowedHosts.size > 0) return false
+    if (!allowQueryComponents && hasQueryComponent) return false
+    if (!allowFragments && hasFragmentComponent) return false
     return true
   }
 
-  if (requireValidProtocol && !includesCaseInsensitive(protocols, protocol)) {
+  if (requireValidProtocol && !protocols.has(protocol)) {
     return false
   }
 
@@ -117,12 +114,12 @@ export function isURL(str: string, options: URLOptions = {}): boolean {
   const hostname = normalizeParsedHostname(url.hostname)
   if (url.hostname && !hostname) return false
   if (
-    normalizedAllowedHosts.length > 0 &&
-    (!hostname || !normalizedAllowedHosts.includes(hostname))
+    allowedHosts.size > 0 &&
+    (!hostname || !allowedHosts.has(hostname))
   ) {
     return false
   }
-  if (hostname && normalizedDisallowedHosts.includes(hostname)) {
+  if (hostname && disallowedHosts.has(hostname)) {
     return false
   }
 
@@ -130,30 +127,123 @@ export function isURL(str: string, options: URLOptions = {}): boolean {
     return false
   }
 
-  if (!allowQueryComponents && url.search) {
+  if (!allowQueryComponents && hasQueryComponent) {
     return false
   }
-  if (!allowFragments && url.hash) {
+  if (!allowFragments && hasFragmentComponent) {
     return false
   }
 
   return true
 }
 
-function includesCaseInsensitive(values: string[], expected: string): boolean {
-  for (const value of values) {
-    if (typeof value === 'string' && value.toLowerCase() === expected) return true
-  }
-
-  return false
+interface ResolvedUrlOptions {
+  maxLength: number
+  protocols: ReadonlySet<string>
+  requireProtocol: boolean
+  requireHost: boolean
+  requireTld: boolean
+  requirePort: boolean
+  requireValidProtocol: boolean
+  allowQueryComponents: boolean
+  allowFragments: boolean
+  allowDataUrl: boolean
+  allowedHosts: ReadonlySet<string>
+  disallowedHosts: ReadonlySet<string>
 }
 
-function normalizeHostList(values: string[]): string[] | null {
-  const normalized: string[] = []
+function resolveUrlOptions(value: unknown): ResolvedUrlOptions | null {
+  if (!value || typeof value !== 'object') return null
+
+  try {
+    const maxLength = readOwnDataOption(value, 'maxLength', DEFAULT_MAX_URL_LENGTH)
+    const protocolsValue = readOwnDataOption(value, 'protocols', DEFAULT_PROTOCOLS)
+    const requireProtocol = readOwnDataOption(value, 'requireProtocol', true)
+    const requireHost = readOwnDataOption(value, 'requireHost', true)
+    const requireTld = readOwnDataOption(value, 'requireTld', false)
+    const requirePort = readOwnDataOption(value, 'requirePort', false)
+    const requireValidProtocol = readOwnDataOption(value, 'requireValidProtocol', true)
+    const allowQueryComponents = readOwnDataOption(value, 'allowQueryComponents', true)
+    const allowFragments = readOwnDataOption(value, 'allowFragments', true)
+    const allowDataUrl = readOwnDataOption(value, 'allowDataUrl', false)
+    const allowedHostsValue = readOwnDataOption(value, 'allowedHosts', [])
+    const disallowedHostsValue = readOwnDataOption(value, 'disallowedHosts', [])
+    const protocols = copyOwnStringArray(protocolsValue)
+    const allowedHostValues = copyOwnStringArray(allowedHostsValue)
+    const disallowedHostValues = copyOwnStringArray(disallowedHostsValue)
+
+    if (
+      maxLength === INVALID_OPTION ||
+      protocolsValue === INVALID_OPTION ||
+      requireProtocol === INVALID_OPTION ||
+      requireHost === INVALID_OPTION ||
+      requireTld === INVALID_OPTION ||
+      requirePort === INVALID_OPTION ||
+      requireValidProtocol === INVALID_OPTION ||
+      allowQueryComponents === INVALID_OPTION ||
+      allowFragments === INVALID_OPTION ||
+      allowDataUrl === INVALID_OPTION ||
+      allowedHostsValue === INVALID_OPTION ||
+      disallowedHostsValue === INVALID_OPTION ||
+      !isPositiveInteger(maxLength) ||
+      !protocols ||
+      protocols.some((protocol) => protocol.length === 0) ||
+      !allowedHostValues ||
+      !disallowedHostValues ||
+      typeof requireProtocol !== 'boolean' ||
+      typeof requireHost !== 'boolean' ||
+      typeof requireTld !== 'boolean' ||
+      typeof requirePort !== 'boolean' ||
+      typeof requireValidProtocol !== 'boolean' ||
+      typeof allowQueryComponents !== 'boolean' ||
+      typeof allowFragments !== 'boolean' ||
+      typeof allowDataUrl !== 'boolean'
+    ) {
+      return null
+    }
+
+    const allowedHosts = normalizeHostList(allowedHostValues)
+    const disallowedHosts = normalizeHostList(disallowedHostValues)
+    if (!allowedHosts || !disallowedHosts) return null
+
+    return {
+      maxLength,
+      protocols: new Set(protocols.map((protocol) => protocol.toLowerCase())),
+      requireProtocol,
+      requireHost,
+      requireTld,
+      requirePort,
+      requireValidProtocol,
+      allowQueryComponents,
+      allowFragments,
+      allowDataUrl,
+      allowedHosts,
+      disallowedHosts,
+    }
+  } catch {
+    return null
+  }
+}
+
+function getUrlComponentPresence(url: URL): {
+  hasQueryComponent: boolean
+  hasFragmentComponent: boolean
+} {
+  const queryIndex = url.href.indexOf('?')
+  const fragmentIndex = url.href.indexOf('#')
+  return {
+    hasQueryComponent:
+      queryIndex !== -1 && (fragmentIndex === -1 || queryIndex < fragmentIndex),
+    hasFragmentComponent: fragmentIndex !== -1,
+  }
+}
+
+function normalizeHostList(values: string[]): ReadonlySet<string> | null {
+  const normalized = new Set<string>()
   for (const value of values) {
     const hostname = normalizeHostname(value)
     if (!hostname) return null
-    normalized.push(hostname)
+    normalized.add(hostname)
   }
 
   return normalized
@@ -202,10 +292,6 @@ function normalizeParsedHostname(value: string): string | null {
   }
 
   return hostname || null
-}
-
-function areBooleanOptions(values: unknown[]): boolean {
-  return values.every((value) => typeof value === 'boolean')
 }
 
 function isPositiveInteger(value: unknown): value is number {

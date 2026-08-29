@@ -9,10 +9,10 @@
 export type * from './types.js'
 
 // Export email validators
-export { isEmail } from './validators/email.js'
+export { createEmailValidator, isEmail } from './validators/email.js'
 
 // Export URL validators
-export { isURL } from './validators/url.js'
+export { createURLValidator, isURL } from './validators/url.js'
 
 // Export numeric validators
 export { isNumeric, isInt, isFloat, isDecimal } from './validators/numeric.js'

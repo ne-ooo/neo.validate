@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- Add compiled email and URL validator factories with immutable host and protocol policies
+
+### Fixed
+
+- Route ESM and CommonJS TypeScript consumers to matching declaration formats
+- Replace quadratic custom trimming with Unicode code-point boundary scans
+- Parse email display addresses in linear time when custom length limits are used
+- Reject URL parser-differential input, enforce empty query and fragment restrictions, and ignore inherited URL policies
+- Validate compressed, scoped, and IPv4-embedded IPv6 addresses without the incomplete monolithic regex
+- Preserve malformed email addresses and detect provider domains case-insensitively during normalization
+- Support RFC 9562 UUID versions 1 through 8 plus nil and max UUIDs
+- Require ISBN-13 Bookland prefixes and validate RFC 3339 leap seconds at possible UTC boundaries
+- Honor explicit locale scripts and keep `noSeparator` additive to enabled MAC formats
+- Bound positive and negative locale caches with LRU eviction
+- Ignore inherited validator policies and reject accessors or revoked proxies without throwing
+- Remove the locked esbuild development-server advisory with a scoped override
+- Replace truncated UUID examples with executable values
+
+### Changed
+
+- Add allocation-saving fast paths for unconstrained and one-sided `isLength` checks
+- Gate releases on low-severity advisories and a reviewed publish-file allowlist
+- Isolate build and test dependencies from the OIDC-enabled publish job
+- Align CI and publishing on the lockfile-compatible LPM CLI release
+
 ## [1.2.0] - 2026-08-11
 
 ### Added

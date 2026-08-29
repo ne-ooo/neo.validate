@@ -1,7 +1,7 @@
 import type { EmailOptions } from '../types.js'
+import { copyOwnStringArray, INVALID_OPTION, readOwnDataOption } from '../options.js'
 
 const utf8Encoder = new TextEncoder()
-const DISPLAY_ADDRESS_PATTERN = /^(.+?)\s*<([^<>]+)>$/
 const DISPLAY_NAME_CONTROL_PATTERN = /[\x00-\x1F\x7F]/
 const INVALID_UNQUOTED_DISPLAY_NAME_PATTERN = /[.";<>]/
 const UTF8_LOCAL_PART_PATTERN = /^[\p{L}\p{N}\p{M}!#$%&'*+/=?^_`{|}~.-]+$/u
@@ -10,6 +10,7 @@ const INVALID_DOMAIN_CHARACTER_PATTERN = /[^\p{L}\p{N}\p{M}.-]/u
 const DOMAIN_LABEL_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i
 const TLD_PATTERN = /^(?:[a-z]{2,63}|xn--[a-z0-9-]{2,59})$/i
 const DEFAULT_MAX_EMAIL_LENGTH = 254
+const ALWAYS_INVALID_EMAIL = (_str: string): boolean => false
 
 /**
  * Validate the supported practical email-address subset
@@ -31,33 +32,47 @@ export function isEmail(str: string, options: EmailOptions = {}): boolean {
     return false
   }
 
-  if (!options || typeof options !== 'object') return false
+  const resolvedOptions = resolveEmailOptions(options)
+  return resolvedOptions ? validateEmail(str, resolvedOptions) : false
+}
 
+/**
+ * Compile an immutable email-validation policy for repeated use
+ *
+ * Invalid options produce a validator that always returns false.
+ */
+export function createEmailValidator(
+  options: EmailOptions = {}
+): (str: string) => boolean {
+  const resolvedOptions = resolveEmailOptions(options)
+  return resolvedOptions
+    ? (str: string) => validateEmail(str, resolvedOptions)
+    : ALWAYS_INVALID_EMAIL
+}
+
+interface ResolvedEmailOptions {
+  maxLength: number
+  allowDisplayName: boolean
+  requireDisplayName: boolean
+  allowUtf8LocalPart: boolean
+  requireTld: boolean
+  blacklistedChars: string
+  hostBlacklist: ReadonlySet<string>
+  hostWhitelist: ReadonlySet<string>
+}
+
+function validateEmail(str: string, options: ResolvedEmailOptions): boolean {
+  if (typeof str !== 'string' || str.length === 0) return false
   const {
-    maxLength = DEFAULT_MAX_EMAIL_LENGTH,
-    allowDisplayName = false,
-    requireDisplayName = false,
-    allowUtf8LocalPart = true,
-    requireTld = true,
-    blacklistedChars = '',
-    hostBlacklist = [],
-    hostWhitelist = [],
+    maxLength,
+    allowDisplayName,
+    requireDisplayName,
+    allowUtf8LocalPart,
+    requireTld,
+    blacklistedChars,
+    hostBlacklist,
+    hostWhitelist,
   } = options
-
-  if (
-    !isPositiveInteger(maxLength) ||
-    typeof allowDisplayName !== 'boolean' ||
-    typeof requireDisplayName !== 'boolean' ||
-    typeof allowUtf8LocalPart !== 'boolean' ||
-    typeof requireTld !== 'boolean' ||
-    typeof blacklistedChars !== 'string' ||
-    !Array.isArray(hostBlacklist) ||
-    !Array.isArray(hostWhitelist) ||
-    !hostBlacklist.every((host) => typeof host === 'string') ||
-    !hostWhitelist.every((host) => typeof host === 'string')
-  ) {
-    return false
-  }
 
   if (str.length > maxLength) return false
 
@@ -99,22 +114,83 @@ export function isEmail(str: string, options: EmailOptions = {}): boolean {
   const domain = normalizeDomain(rawDomain, requireTld)
   if (!domain) return false
 
-  const normalizedWhitelist = normalizeDomains(hostWhitelist)
-  const normalizedBlacklist = normalizeDomains(hostBlacklist)
-  if (!normalizedWhitelist || !normalizedBlacklist) return false
-  if (normalizedWhitelist.length > 0 && !normalizedWhitelist.includes(domain)) return false
-  if (normalizedBlacklist.includes(domain)) return false
+  if (hostWhitelist.size > 0 && !hostWhitelist.has(domain)) return false
+  if (hostBlacklist.has(domain)) return false
 
   return true
 }
 
+function resolveEmailOptions(value: unknown): ResolvedEmailOptions | null {
+  if (!value || typeof value !== 'object') return null
+
+  try {
+    const maxLength = readOwnDataOption(value, 'maxLength', DEFAULT_MAX_EMAIL_LENGTH)
+    const allowDisplayName = readOwnDataOption(value, 'allowDisplayName', false)
+    const requireDisplayName = readOwnDataOption(value, 'requireDisplayName', false)
+    const allowUtf8LocalPart = readOwnDataOption(value, 'allowUtf8LocalPart', true)
+    const requireTld = readOwnDataOption(value, 'requireTld', true)
+    const blacklistedChars = readOwnDataOption(value, 'blacklistedChars', '')
+    const hostBlacklistValue = readOwnDataOption(value, 'hostBlacklist', [])
+    const hostWhitelistValue = readOwnDataOption(value, 'hostWhitelist', [])
+    const hostBlacklistValues = copyOwnStringArray(hostBlacklistValue)
+    const hostWhitelistValues = copyOwnStringArray(hostWhitelistValue)
+
+    if (
+      maxLength === INVALID_OPTION ||
+      allowDisplayName === INVALID_OPTION ||
+      requireDisplayName === INVALID_OPTION ||
+      allowUtf8LocalPart === INVALID_OPTION ||
+      requireTld === INVALID_OPTION ||
+      blacklistedChars === INVALID_OPTION ||
+      hostBlacklistValue === INVALID_OPTION ||
+      hostWhitelistValue === INVALID_OPTION ||
+      !isPositiveInteger(maxLength) ||
+      typeof allowDisplayName !== 'boolean' ||
+      typeof requireDisplayName !== 'boolean' ||
+      typeof allowUtf8LocalPart !== 'boolean' ||
+      typeof requireTld !== 'boolean' ||
+      typeof blacklistedChars !== 'string' ||
+      !hostBlacklistValues ||
+      !hostWhitelistValues
+    ) {
+      return null
+    }
+
+    const hostBlacklist = normalizeDomains(hostBlacklistValues)
+    const hostWhitelist = normalizeDomains(hostWhitelistValues)
+    if (!hostBlacklist || !hostWhitelist) return null
+
+    return {
+      maxLength,
+      allowDisplayName,
+      requireDisplayName,
+      allowUtf8LocalPart,
+      requireTld,
+      blacklistedChars,
+      hostBlacklist,
+      hostWhitelist,
+    }
+  } catch {
+    return null
+  }
+}
+
 function parseDisplayAddress(value: string): { displayName: string; address: string } | null {
-  const match = value.match(DISPLAY_ADDRESS_PATTERN)
-  if (!match) return null
+  if (!value.endsWith('>')) return null
+
+  const openingBracketIndex = value.indexOf('<')
+  const closingBracketIndex = value.length - 1
+  if (
+    openingBracketIndex <= 0 ||
+    openingBracketIndex !== value.lastIndexOf('<') ||
+    closingBracketIndex !== value.indexOf('>')
+  ) {
+    return null
+  }
 
   return {
-    displayName: match[1]?.trim() ?? '',
-    address: match[2]?.trim() ?? '',
+    displayName: value.slice(0, openingBracketIndex).trim(),
+    address: value.slice(openingBracketIndex + 1, closingBracketIndex).trim(),
   }
 }
 
@@ -145,12 +221,12 @@ function isValidQuotedDisplayName(value: string): boolean {
   return true
 }
 
-function normalizeDomains(hosts: string[]): string[] | null {
-  const normalized: string[] = []
+function normalizeDomains(hosts: string[]): ReadonlySet<string> | null {
+  const normalized = new Set<string>()
   for (const host of hosts) {
     const normalizedHost = normalizeDomain(host, false)
     if (!normalizedHost) return null
-    normalized.push(normalizedHost)
+    normalized.add(normalizedHost)
   }
 
   return normalized

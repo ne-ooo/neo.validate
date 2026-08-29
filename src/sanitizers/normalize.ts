@@ -1,8 +1,15 @@
 import type { NormalizeEmailOptions } from '../types.js'
+import { INVALID_OPTION, readOwnDataOption } from '../options.js'
 
 const DOT_PATTERN = /\./g
+const NON_ASCII_PATTERN = /[^\x00-\x7F]/
 const LOW_CONTROL_PATTERN = /[\x00-\x1F\x7F]/g
 const LOW_CONTROL_EXCEPT_NEWLINES_PATTERN = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g
+const NORMALIZABLE_LOCAL_PART_PATTERN = /^[\p{L}\p{N}\p{M}!#$%&'*+/=?^_`{|}~.-]+$/u
+const INVALID_NORMALIZABLE_DOMAIN_CHARACTER_PATTERN = /[^\p{L}\p{N}\p{M}.-]/u
+const NORMALIZABLE_DOMAIN_LABEL_PATTERN =
+  /^[\p{L}\p{N}\p{M}](?:[\p{L}\p{N}\p{M}-]*[\p{L}\p{N}\p{M}])?$/u
+const utf8Encoder = new TextEncoder()
 
 /**
  * Trim whitespace from both ends of string
@@ -28,9 +35,10 @@ export function trim(str: string, chars?: string): string {
     return str.trim()
   }
 
-  const escapedChars = escapeCharacterClass(chars)
-  const regex = new RegExp(`^[${escapedChars}]+|[${escapedChars}]+$`, 'g')
-  return str.replace(regex, '')
+  const trimCharacters = new Set(chars)
+  const start = findLeftTrimIndex(str, trimCharacters)
+  const end = findRightTrimIndex(str, trimCharacters, start)
+  return str.slice(start, end)
 }
 
 /**
@@ -57,9 +65,8 @@ export function ltrim(str: string, chars?: string): string {
     return str.trimStart()
   }
 
-  const escapedChars = escapeCharacterClass(chars)
-  const regex = new RegExp(`^[${escapedChars}]+`, 'g')
-  return str.replace(regex, '')
+  const trimCharacters = new Set(chars)
+  return str.slice(findLeftTrimIndex(str, trimCharacters))
 }
 
 /**
@@ -86,9 +93,8 @@ export function rtrim(str: string, chars?: string): string {
     return str.trimEnd()
   }
 
-  const escapedChars = escapeCharacterClass(chars)
-  const regex = new RegExp(`[${escapedChars}]+$`, 'g')
-  return str.replace(regex, '')
+  const trimCharacters = new Set(chars)
+  return str.slice(0, findRightTrimIndex(str, trimCharacters, 0))
 }
 
 /**
@@ -113,7 +119,8 @@ export function normalizeEmail(email: string, options: NormalizeEmailOptions = {
     return email
   }
 
-  if (!isNormalizeEmailOptions(options)) return email
+  const resolvedOptions = resolveNormalizeEmailOptions(options)
+  if (!resolvedOptions) return email
 
   const atIndex = email.indexOf('@')
   if (atIndex <= 0 || atIndex !== email.lastIndexOf('@') || atIndex === email.length - 1) {
@@ -127,25 +134,37 @@ export function normalizeEmail(email: string, options: NormalizeEmailOptions = {
     outlookRemoveSubaddress = true,
     yahooRemoveSubaddress = true,
     gmailConvertGooglemail = true,
-  } = options
+  } = resolvedOptions
 
   let local = email.slice(0, atIndex)
   let domain = email.slice(atIndex + 1)
+  if (
+    exceedsUtf8Length(email, 254) ||
+    !isNormalizableLocalPart(local) ||
+    !isNormalizableDomain(domain)
+  ) {
+    return email
+  }
+
+  const canonicalDomain = domain.toLowerCase()
+  const providerDomain = canonicalDomain.endsWith('.')
+    ? canonicalDomain.slice(0, -1)
+    : canonicalDomain
 
   // Convert to lowercase
   if (allLowercase) {
     local = local.toLowerCase()
-    domain = domain.toLowerCase()
+    domain = canonicalDomain
   }
 
   // Gmail-specific normalization
   if (
-    domain === 'gmail.com' ||
-    domain === 'googlemail.com'
+    providerDomain === 'gmail.com' ||
+    providerDomain === 'googlemail.com'
   ) {
     // Convert googlemail.com to gmail.com
-    if (gmailConvertGooglemail && domain === 'googlemail.com') {
-      domain = 'gmail.com'
+    if (gmailConvertGooglemail && providerDomain === 'googlemail.com') {
+      domain = canonicalDomain.endsWith('.') ? 'gmail.com.' : 'gmail.com'
     }
 
     // Remove dots from Gmail addresses (Gmail ignores dots)
@@ -165,9 +184,9 @@ export function normalizeEmail(email: string, options: NormalizeEmailOptions = {
   // Outlook-specific normalization
   if (
     outlookRemoveSubaddress &&
-    (domain === 'outlook.com' ||
-      domain === 'hotmail.com' ||
-      domain === 'live.com')
+    (providerDomain === 'outlook.com' ||
+      providerDomain === 'hotmail.com' ||
+      providerDomain === 'live.com')
   ) {
     const plusIndex = local.indexOf('+')
     if (plusIndex !== -1) {
@@ -176,24 +195,83 @@ export function normalizeEmail(email: string, options: NormalizeEmailOptions = {
   }
 
   // Yahoo-specific normalization
-  if (yahooRemoveSubaddress && domain === 'yahoo.com') {
+  if (yahooRemoveSubaddress && providerDomain === 'yahoo.com') {
     const hyphenIndex = local.indexOf('-')
     if (hyphenIndex !== -1) {
       local = local.slice(0, hyphenIndex)
     }
   }
 
-  return `${local}@${domain}`
+  return isNormalizableLocalPart(local) ? `${local}@${domain}` : email
 }
 
-function escapeCharacterClass(value: string): string {
-  return [...value]
-    .map((character) =>
-      character === '\\' || character === '-' || character === ']' || character === '^'
-        ? `\\${character}`
-        : character
+function findLeftTrimIndex(value: string, trimCharacters: ReadonlySet<string>): number {
+  let index = 0
+  for (const character of value) {
+    if (!trimCharacters.has(character)) break
+    index += character.length
+  }
+
+  return index
+}
+
+function findRightTrimIndex(
+  value: string,
+  trimCharacters: ReadonlySet<string>,
+  minimumIndex: number
+): number {
+  let index = value.length
+  while (index > minimumIndex) {
+    const finalCodeUnit = value.charCodeAt(index - 1)
+    const hasSurrogatePair =
+      finalCodeUnit >= 0xdc00 &&
+      finalCodeUnit <= 0xdfff &&
+      index - 2 >= minimumIndex &&
+      value.charCodeAt(index - 2) >= 0xd800 &&
+      value.charCodeAt(index - 2) <= 0xdbff
+    const characterLength = hasSurrogatePair ? 2 : 1
+    const character = value.slice(index - characterLength, index)
+    if (!trimCharacters.has(character)) break
+    index -= characterLength
+  }
+
+  return index
+}
+
+function isNormalizableLocalPart(value: string): boolean {
+  return (
+    value.length > 0 &&
+    !exceedsUtf8Length(value, 64) &&
+    !value.startsWith('.') &&
+    !value.endsWith('.') &&
+    !value.includes('..') &&
+    NORMALIZABLE_LOCAL_PART_PATTERN.test(value)
+  )
+}
+
+function isNormalizableDomain(value: string): boolean {
+  const withoutTrailingDot = value.endsWith('.') ? value.slice(0, -1) : value
+  if (
+    !withoutTrailingDot ||
+    exceedsUtf8Length(value, 254) ||
+    INVALID_NORMALIZABLE_DOMAIN_CHARACTER_PATTERN.test(withoutTrailingDot)
+  ) {
+    return false
+  }
+
+  return withoutTrailingDot
+    .split('.')
+    .every(
+      (label) =>
+        label.length > 0 &&
+        label.length <= 63 &&
+        NORMALIZABLE_DOMAIN_LABEL_PATTERN.test(label)
     )
-    .join('')
+}
+
+function exceedsUtf8Length(value: string, maximumLength: number): boolean {
+  if (value.length > maximumLength) return true
+  return NON_ASCII_PATTERN.test(value) && utf8Encoder.encode(value).length > maximumLength
 }
 
 /**
@@ -225,15 +303,31 @@ export function stripLow(str: string, keepNewLines: boolean = false): string {
   return str.replace(LOW_CONTROL_PATTERN, '')
 }
 
-function isNormalizeEmailOptions(value: unknown): value is NormalizeEmailOptions {
-  if (!value || typeof value !== 'object') return false
-  const options = value as NormalizeEmailOptions
-  return [
-    options.allLowercase,
-    options.gmailRemoveDots,
-    options.gmailRemoveSubaddress,
-    options.outlookRemoveSubaddress,
-    options.yahooRemoveSubaddress,
-    options.gmailConvertGooglemail,
-  ].every((option) => option === undefined || typeof option === 'boolean')
+function resolveNormalizeEmailOptions(value: unknown): Required<NormalizeEmailOptions> | null {
+  const allLowercase = readOwnDataOption(value, 'allLowercase', true)
+  const gmailRemoveDots = readOwnDataOption(value, 'gmailRemoveDots', true)
+  const gmailRemoveSubaddress = readOwnDataOption(value, 'gmailRemoveSubaddress', true)
+  const outlookRemoveSubaddress = readOwnDataOption(value, 'outlookRemoveSubaddress', true)
+  const yahooRemoveSubaddress = readOwnDataOption(value, 'yahooRemoveSubaddress', true)
+  const gmailConvertGooglemail = readOwnDataOption(
+    value,
+    'gmailConvertGooglemail',
+    true
+  )
+  const resolved = {
+    allLowercase,
+    gmailRemoveDots,
+    gmailRemoveSubaddress,
+    outlookRemoveSubaddress,
+    yahooRemoveSubaddress,
+    gmailConvertGooglemail,
+  }
+  if (
+    Object.values(resolved).some(
+      (option) => option === INVALID_OPTION || typeof option !== 'boolean'
+    )
+  ) {
+    return null
+  }
+  return resolved as Required<NormalizeEmailOptions>
 }
