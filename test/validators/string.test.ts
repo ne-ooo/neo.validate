@@ -50,6 +50,26 @@ describe('isAlpha', () => {
     expect(isAlpha('Ж', 'fr-FR')).toBe(false)
     expect(isAlpha('bonjour', 'not-a-locale')).toBe(false)
   })
+
+  it('should honor explicit locale script subtags', () => {
+    expect(isAlpha('Салам', 'az-Cyrl')).toBe(true)
+    expect(isAlpha('Salam', 'az-Cyrl')).toBe(false)
+    expect(isAlpha('Salam', 'az-Latn')).toBe(true)
+    expect(isAlpha('ਪੰਜਾਬੀ', 'pa-Guru')).toBe(true)
+    expect(isAlpha('پنجابی', 'pa-Arab')).toBe(true)
+    expect(isAlpha('ਪੰਜਾਬੀ', 'pa-Arab')).toBe(false)
+    expect(isAlpha('Ж', 'en-Cyrl')).toBe(true)
+    expect(isAlpha('café', 'en-Latn')).toBe(false)
+  })
+
+  it('should remain stable across invalid and high-cardinality locale requests', () => {
+    expect(isAlpha('café', 'fr-FR')).toBe(true)
+    for (let index = 0; index < 100; index++) {
+      expect(isAlpha('x', `zz-Latn-x-v${index}`)).toBe(false)
+    }
+    expect(isAlpha('x', `en-${'x'.repeat(200)}`)).toBe(false)
+    expect(isAlpha('café', 'fr-FR')).toBe(true)
+  })
 })
 
 describe('isAlphanumeric', () => {
@@ -133,6 +153,13 @@ describe('isLength', () => {
 
   it('should stop after the maximum length is exceeded', () => {
     expect(isLength('a'.repeat(100_000), { max: 10 })).toBe(false)
+  })
+
+  it('should fast-path unconstrained and minimum-only large strings', () => {
+    const oversized = `${'a'.repeat(100_000)}😀`
+    expect(isLength(oversized)).toBe(true)
+    expect(isLength(oversized, { min: 10 })).toBe(true)
+    expect(isLength('😀', { min: 2 })).toBe(false)
   })
 })
 

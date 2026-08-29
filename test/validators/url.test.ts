@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isURL } from '../../src/validators/url.js'
+import { createURLValidator, isURL } from '../../src/validators/url.js'
 
 describe('isURL', () => {
   describe('valid URLs', () => {
@@ -102,12 +102,35 @@ describe('isURL', () => {
         true
       )
       expect(isURL('http://example.com', { allowQueryComponents: false })).toBe(true)
+      expect(isURL('http://example.com?', { allowQueryComponents: false })).toBe(false)
+      expect(
+        isURL('example.com?', {
+          requireProtocol: false,
+          allowQueryComponents: false,
+        })
+      ).toBe(false)
+      expect(
+        isURL('data:text/plain,hello?', {
+          allowDataUrl: true,
+          allowQueryComponents: false,
+        })
+      ).toBe(false)
+      expect(
+        isURL('http://example.com#?fragment', { allowQueryComponents: false })
+      ).toBe(true)
     })
 
     it('should respect allowFragments option', () => {
       expect(isURL('http://example.com#section', { allowFragments: false })).toBe(false)
       expect(isURL('http://example.com#section', { allowFragments: true })).toBe(true)
       expect(isURL('http://example.com', { allowFragments: false })).toBe(true)
+      expect(isURL('http://example.com#', { allowFragments: false })).toBe(false)
+      expect(
+        isURL('data:text/plain,hello#', {
+          allowDataUrl: true,
+          allowFragments: false,
+        })
+      ).toBe(false)
     })
 
     it('should respect allowDataUrl option', () => {
@@ -194,6 +217,24 @@ describe('isURL', () => {
       expect(
         isURL('https://example.com', { allowedHosts: [null] } as any)
       ).toBe(false)
+      const accessorOptions = Object.defineProperty({}, 'allowDataUrl', {
+        get() {
+          throw new Error('must not execute option accessors')
+        },
+      })
+      expect(() => isURL('data:text/plain,hello', accessorOptions)).not.toThrow()
+      expect(isURL('data:text/plain,hello', accessorOptions)).toBe(false)
+      const revoked = Proxy.revocable({}, {})
+      revoked.revoke()
+      expect(() => isURL('https://example.com', revoked.proxy)).not.toThrow()
+      expect(isURL('https://example.com', revoked.proxy)).toBe(false)
+    })
+
+    it('should ignore inherited policy values', () => {
+      const dataOptions = Object.create({ allowDataUrl: true })
+      const protocolOptions = Object.create({ requireValidProtocol: false })
+      expect(isURL('data:text/html,<script>alert(1)</script>', dataOptions)).toBe(false)
+      expect(isURL('gopher://example.com', protocolOptions)).toBe(false)
     })
   })
 
@@ -222,6 +263,60 @@ describe('isURL', () => {
       const oversized = `https://example.com/${'a'.repeat(2084)}`
       expect(isURL(oversized)).toBe(false)
       expect(isURL(oversized, { maxLength: oversized.length })).toBe(true)
+    })
+
+    it('should reject raw backslashes and ASCII controls before parsing', () => {
+      expect(
+        isURL('http://good.com\\@evil.com', { allowedHosts: ['good.com'] })
+      ).toBe(false)
+      expect(isURL('http://exa\nmple.com')).toBe(false)
+      expect(isURL('http://example.com/\r\nX-Test: value')).toBe(false)
+    })
+  })
+
+  describe('compiled validator', () => {
+    it('matches one-off validation with a reusable policy', () => {
+      const options = {
+        protocols: ['https'],
+        requireTld: true,
+        allowedHosts: ['example.com'],
+      }
+      const validate = createURLValidator(options)
+
+      expect(validate('https://example.com/path')).toBe(
+        isURL('https://example.com/path', options)
+      )
+      expect(validate('http://example.com')).toBe(false)
+      expect(validate('https://other.com')).toBe(false)
+      expect(validate(null as any)).toBe(false)
+    })
+
+    it('snapshots mutable protocol and host policies', () => {
+      const protocols = ['https']
+      const allowedHosts = ['example.com']
+      const disallowedHosts = ['spam.com']
+      const validate = createURLValidator({ protocols, allowedHosts, disallowedHosts })
+
+      protocols[0] = 'http'
+      allowedHosts[0] = 'other.com'
+      disallowedHosts[0] = 'example.com'
+
+      expect(validate('https://example.com')).toBe(true)
+      expect(validate('http://example.com')).toBe(false)
+      expect(validate('https://other.com')).toBe(false)
+      expect(validate('https://spam.com')).toBe(false)
+    })
+
+    it('returns an always-false validator for invalid options', () => {
+      const malformed = createURLValidator({ protocols: [null] } as any)
+      const accessorOptions = Object.defineProperty({}, 'allowDataUrl', {
+        get() {
+          throw new Error('must not execute option accessors')
+        },
+      })
+      expect(malformed('https://example.com')).toBe(false)
+      expect(() => createURLValidator(accessorOptions)).not.toThrow()
+      expect(createURLValidator(accessorOptions)('https://example.com')).toBe(false)
     })
   })
 })

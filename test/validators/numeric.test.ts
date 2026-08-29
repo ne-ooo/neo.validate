@@ -168,6 +168,18 @@ describe('isFloat', () => {
     expect(isFloat('12.5', { locale: 'invalid_locale' })).toBe(false)
   })
 
+  it('should remain stable across invalid and high-cardinality locale requests', () => {
+    expect(isFloat('12.5', { locale: 'en-US' })).toBe(true)
+    for (let index = 0; index < 40; index++) {
+      expect(isFloat('12.5', { locale: `invalid_locale_${index}` })).toBe(false)
+    }
+    for (let index = 0; index < 40; index++) {
+      expect(isFloat('12.5', { locale: `en-US-x-v${index}` })).toBe(true)
+    }
+    expect(isFloat('12.5', { locale: 'x'.repeat(200) })).toBe(false)
+    expect(isFloat('12.5', { locale: 'en-US' })).toBe(true)
+  })
+
   it('should validate with range options', () => {
     expect(isFloat('5.5', { min: 1, max: 10 })).toBe(true)
     expect(isFloat('0.5', { min: 1, max: 10 })).toBe(false)

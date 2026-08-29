@@ -85,6 +85,14 @@ describe('trim', () => {
   it('treats hyphen as a literal custom character', () => {
     expect(trim('bbbHello', 'a-z')).toBe('bbbHello')
   })
+  it('treats astral custom characters as complete Unicode code points', () => {
+    expect(trim('😀hello😀', '😀')).toBe('hello')
+    expect(trim('😁hello😁', '😀')).toBe('😁hello😁')
+  })
+  it('handles long non-matching custom-character runs in linear time', () => {
+    const value = `X${'a'.repeat(20_000)}Y`
+    expect(trim(value, 'a')).toBe(value)
+  })
   it('returns empty string when all chars are trimmed', () => {
     expect(trim('   ')).toBe('')
   })
@@ -113,6 +121,10 @@ describe('ltrim', () => {
   it('does not interpret a custom hyphen as a character range', () => {
     expect(ltrim('bbbHello', 'a-z')).toBe('bbbHello')
   })
+  it('trims astral characters without splitting a neighboring code point', () => {
+    expect(ltrim('😀hello😀', '😀')).toBe('hello😀')
+    expect(ltrim('😁hello', '😀')).toBe('😁hello')
+  })
   it('returns empty string for non-string input', () => {
     // @ts-expect-error intentional wrong type
     expect(ltrim(null)).toBe('')
@@ -131,6 +143,14 @@ describe('rtrim', () => {
   })
   it('does not interpret a custom hyphen as a character range', () => {
     expect(rtrim('Helloaaa', 'a-z')).toBe('Hello')
+  })
+  it('trims complete astral characters from the right', () => {
+    expect(rtrim('😀hello😀', '😀')).toBe('😀hello')
+    expect(rtrim('hello😁', '😀')).toBe('hello😁')
+  })
+  it('handles long non-matching custom-character runs in linear time', () => {
+    const value = `X${'a'.repeat(20_000)}Y`
+    expect(rtrim(value, 'a')).toBe(value)
   })
   it('returns empty string for non-string input', () => {
     // @ts-expect-error intentional wrong type
@@ -169,6 +189,14 @@ describe('normalizeEmail', () => {
         })
       ).toBe('testuser@googlemail.com')
     })
+    it('detects provider domains case-insensitively without forcing output lowercase', () => {
+      expect(
+        normalizeEmail('Test.User+tag@GMAIL.COM', { allLowercase: false })
+      ).toBe('TestUser@GMAIL.COM')
+      expect(
+        normalizeEmail('Test.User@GOOGLEMAIL.COM', { allLowercase: false })
+      ).toBe('TestUser@gmail.com')
+    })
   })
 
   describe('Outlook normalization', () => {
@@ -181,11 +209,21 @@ describe('normalizeEmail', () => {
     it('removes subaddress from live.com', () => {
       expect(normalizeEmail('user+tag@live.com')).toBe('user@live.com')
     })
+    it('detects Outlook domains case-insensitively when lowercase output is disabled', () => {
+      expect(normalizeEmail('User+tag@OUTLOOK.COM', { allLowercase: false })).toBe(
+        'User@OUTLOOK.COM'
+      )
+    })
   })
 
   describe('Yahoo normalization', () => {
     it('removes Yahoo hyphen subaddress', () => {
       expect(normalizeEmail('user-tag@yahoo.com')).toBe('user@yahoo.com')
+    })
+    it('detects Yahoo domains case-insensitively when lowercase output is disabled', () => {
+      expect(normalizeEmail('User-tag@YAHOO.COM', { allLowercase: false })).toBe(
+        'User@YAHOO.COM'
+      )
     })
   })
 
@@ -200,6 +238,13 @@ describe('normalizeEmail', () => {
       expect(normalizeEmail('a@b@c')).toBe('a@b@c')
       expect(normalizeEmail('@example.com')).toBe('@example.com')
       expect(normalizeEmail('user@')).toBe('user@')
+      expect(normalizeEmail('a..b@gmail.com')).toBe('a..b@gmail.com')
+      expect(normalizeEmail('+tag@gmail.com')).toBe('+tag@gmail.com')
+      expect(normalizeEmail('+tag@outlook.com')).toBe('+tag@outlook.com')
+      expect(normalizeEmail('-tag@yahoo.com')).toBe('-tag@yahoo.com')
+      expect(normalizeEmail('user@-example.com')).toBe('user@-example.com')
+      const oversizedLocal = `${'A'.repeat(65)}@GMAIL.COM`
+      expect(normalizeEmail(oversizedLocal)).toBe(oversizedLocal)
     })
     it('returns a string for malformed runtime inputs', () => {
       expect(normalizeEmail(null as any)).toBe('')

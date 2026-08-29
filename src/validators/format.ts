@@ -1,4 +1,5 @@
 import type { Base64Options, JSONOptions } from '../types.js'
+import { INVALID_OPTION, readOwnDataOption } from '../options.js'
 
 const STANDARD_BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 const URL_SAFE_BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
@@ -33,9 +34,14 @@ export function isJSON(str: string, options: JSONOptions = {}): boolean {
     return false
   }
 
-  if (!options || typeof options !== 'object') return false
-  const { maxLength = DEFAULT_MAX_JSON_LENGTH } = options
-  if (!isPositiveInteger(maxLength) || str.length > maxLength) return false
+  const maxLength = readOwnDataOption(options, 'maxLength', DEFAULT_MAX_JSON_LENGTH)
+  if (
+    maxLength === INVALID_OPTION ||
+    !isPositiveInteger(maxLength) ||
+    str.length > maxLength
+  ) {
+    return false
+  }
 
   try {
     JSON.parse(str)
@@ -64,9 +70,8 @@ export function isBase64(str: string, options: Base64Options = {}): boolean {
     return false
   }
 
-  if (!options || typeof options !== 'object') return false
-  const { urlSafe = false } = options
-  if (typeof urlSafe !== 'boolean') return false
+  const urlSafe = readOwnDataOption(options, 'urlSafe', false)
+  if (urlSafe === INVALID_OPTION || typeof urlSafe !== 'boolean') return false
   const alphabet = urlSafe ? URL_SAFE_BASE64_ALPHABET : STANDARD_BASE64_ALPHABET
   const pattern = urlSafe ? URL_SAFE_BASE64_PATTERN : STANDARD_BASE64_PATTERN
   const match = str.match(pattern)
@@ -192,7 +197,8 @@ export function isRFC3339(str: string): boolean {
   const match = str.match(RFC3339_PATTERN)
   if (!match) return false
 
-  const [, year, month, day, hour, minute, second, , offsetHour, offsetMinute] = match
+  const [, year, month, day, hour, minute, second, offsetSign, offsetHour, offsetMinute] =
+    match
   if (!isValidCalendarDate(Number(year), Number(month), Number(day))) return false
   if (!isValidTime(Number(hour), Number(minute), Number(second), true)) return false
 
@@ -203,7 +209,49 @@ export function isRFC3339(str: string): boolean {
     return false
   }
 
+  if (
+    Number(second) === 60 &&
+    !isPossibleRfc3339LeapSecond(
+      Number(year),
+      Number(month),
+      Number(day),
+      Number(hour),
+      Number(minute),
+      offsetSign,
+      Number(offsetHour ?? 0),
+      Number(offsetMinute ?? 0)
+    )
+  ) {
+    return false
+  }
+
   return true
+}
+
+function isPossibleRfc3339LeapSecond(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  offsetSign: string | undefined,
+  offsetHour: number,
+  offsetMinute: number
+): boolean {
+  const localTime = new Date(0)
+  localTime.setUTCFullYear(year, month - 1, day)
+  localTime.setUTCHours(hour, minute, 0, 0)
+
+  const direction = offsetSign === '-' ? -1 : 1
+  const offsetMilliseconds = direction * (offsetHour * 60 + offsetMinute) * 60_000
+  const utcTime = new Date(localTime.getTime() - offsetMilliseconds)
+
+  return (
+    utcTime.getUTCHours() === 23 &&
+    utcTime.getUTCMinutes() === 59 &&
+    ((utcTime.getUTCMonth() === 5 && utcTime.getUTCDate() === 30) ||
+      (utcTime.getUTCMonth() === 11 && utcTime.getUTCDate() === 31))
+  )
 }
 
 function isValidCalendarDate(year: number, month: number, day: number): boolean {

@@ -270,9 +270,11 @@ describe('isRFC3339', () => {
     it('accepts datetime with nanosecond precision', () => {
       expect(isRFC3339('2023-12-25T10:30:00.123456789Z')).toBe(true)
     })
-    it('accepts lowercase t and z and a leap second', () => {
+    it('accepts lowercase t and z and possible UTC leap-second boundaries', () => {
       expect(isRFC3339('2023-12-25t10:30:00z')).toBe(true)
-      expect(isRFC3339('2023-12-25T23:59:60Z')).toBe(true)
+      expect(isRFC3339('2016-12-31T23:59:60Z')).toBe(true)
+      expect(isRFC3339('2017-01-01T00:59:60+01:00')).toBe(true)
+      expect(isRFC3339('2016-12-31T18:59:60-05:00')).toBe(true)
     })
   })
 
@@ -299,6 +301,12 @@ describe('isRFC3339', () => {
       expect(isRFC3339('2024-01-01T23:59:61Z')).toBe(false)
       expect(isRFC3339('2024-01-01T23:59:59+24:00')).toBe(false)
       expect(isRFC3339('2024-01-01T99:99:99+99:99')).toBe(false)
+    })
+    it('rejects leap seconds away from possible UTC boundaries', () => {
+      expect(isRFC3339('2023-12-25T23:59:60Z')).toBe(false)
+      expect(isRFC3339('2016-12-31T22:59:60Z')).toBe(false)
+      expect(isRFC3339('2017-01-01T00:59:60Z')).toBe(false)
+      expect(isRFC3339('2016-12-31T23:59:60+01:00')).toBe(false)
     })
   })
 })

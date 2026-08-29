@@ -1,18 +1,14 @@
-import type { JWTOptions } from '../types.js'
+import type { JWTOptions, UUIDVersion } from '../types.js'
+import { INVALID_OPTION, readOwnDataOption } from '../options.js'
 import { isBase64 } from './format.js'
 
-const UUID_PATTERNS = {
-  1: /^[0-9a-f]{8}-[0-9a-f]{4}-1[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-  3: /^[0-9a-f]{8}-[0-9a-f]{4}-3[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-  4: /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-  5: /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-} as const
-
 const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const NIL_UUID = '00000000-0000-0000-0000-000000000000'
+const MAX_UUID = 'ffffffff-ffff-ffff-ffff-ffffffffffff'
 const ISBN_SEPARATOR_PATTERN = /[\s-]/g
 const ISBN10_PATTERN = /^[0-9]{9}[0-9X]$/i
-const ISBN13_PATTERN = /^[0-9]{13}$/
+const ISBN13_PATTERN = /^(?:978|979)[0-9]{10}$/
 const MONGO_ID_PATTERN = /^[0-9a-f]{24}$/i
 const BASE64_URL_PATTERN = /^[A-Za-z0-9_-]+$/
 const DEFAULT_MAX_JWT_LENGTH = 8192
@@ -22,7 +18,7 @@ const utf8Decoder = new TextDecoder('utf-8', { fatal: true })
  * Check if string is a valid UUID
  *
  * @param str - String to validate
- * @param version - UUID version (1, 3, 4, 5, or undefined for any)
+ * @param version - UUID version (1 through 8, or undefined for any RFC 9562 UUID)
  * @returns true if valid UUID, false otherwise
  *
  * @example
@@ -32,17 +28,23 @@ const utf8Decoder = new TextDecoder('utf-8', { fatal: true })
  * isUUID('invalid-uuid') // false
  * ```
  */
-export function isUUID(str: string, version?: 1 | 3 | 4 | 5): boolean {
+export function isUUID(str: string, version?: UUIDVersion): boolean {
   if (typeof str !== 'string' || str.length === 0) {
     return false
   }
 
   if (version !== undefined) {
-    const versionPattern = (UUID_PATTERNS as Partial<Record<number, RegExp>>)[version]
-    return versionPattern?.test(str) ?? false
+    return (
+      Number.isInteger(version) &&
+      version >= 1 &&
+      version <= 8 &&
+      str[14] === String(version) &&
+      UUID_PATTERN.test(str)
+    )
   }
 
-  return UUID_PATTERN.test(str)
+  const normalized = str.toLowerCase()
+  return UUID_PATTERN.test(str) || normalized === NIL_UUID || normalized === MAX_UUID
 }
 
 /**
@@ -156,9 +158,14 @@ export function isJWT(str: string, options: JWTOptions = {}): boolean {
     return false
   }
 
-  if (!options || typeof options !== 'object') return false
-  const { maxLength = DEFAULT_MAX_JWT_LENGTH } = options
-  if (!isPositiveInteger(maxLength) || str.length > maxLength) return false
+  const maxLength = readOwnDataOption(options, 'maxLength', DEFAULT_MAX_JWT_LENGTH)
+  if (
+    maxLength === INVALID_OPTION ||
+    !isPositiveInteger(maxLength) ||
+    str.length > maxLength
+  ) {
+    return false
+  }
 
   // JWT has 3 parts separated by dots
   const parts = str.split('.')

@@ -27,8 +27,13 @@ describe('isUUID', () => {
     it('rejects plain text', () => {
       expect(isUUID('not-a-uuid')).toBe(false)
     })
+    it('accepts nil and max UUIDs defined by RFC 9562', () => {
+      expect(isUUID('00000000-0000-0000-0000-000000000000')).toBe(true)
+      expect(isUUID('ffffffff-ffff-ffff-ffff-ffffffffffff')).toBe(true)
+      expect(isUUID('FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF')).toBe(true)
+    })
     it('rejects an unsupported runtime version without throwing', () => {
-      expect(isUUID('550e8400-e29b-41d4-a716-446655440000', 2 as any)).toBe(false)
+      expect(isUUID('550e8400-e29b-41d4-a716-446655440000', 9 as any)).toBe(false)
     })
   })
 
@@ -48,6 +53,20 @@ describe('isUUID', () => {
     it('rejects v4 when version=5 required', () => {
       expect(isUUID('550e8400-e29b-41d4-a716-446655440000', 5)).toBe(false)
     })
+    it.each([
+      [2, '000003e8-2361-21ef-bf00-325096b39f47'],
+      [3, '550e8400-e29b-31d4-a716-446655440000'],
+      [6, '1ef153d0-7be7-6b00-98e9-325096b39f47'],
+      [7, '019535d9-3df7-7a28-8a7f-9f4bc7c8e101'],
+      [8, '2489e9ad-2ee2-8e00-8ec9-4a4e525e2390'],
+    ] as const)('accepts UUIDv%s in generic and version-specific modes', (version, uuid) => {
+      expect(isUUID(uuid)).toBe(true)
+      expect(isUUID(uuid, version)).toBe(true)
+    })
+    it('does not treat nil and max UUIDs as version-specific UUIDs', () => {
+      expect(isUUID('00000000-0000-0000-0000-000000000000', 1)).toBe(false)
+      expect(isUUID('ffffffff-ffff-ffff-ffff-ffffffffffff', 8)).toBe(false)
+    })
   })
 })
 
@@ -64,6 +83,10 @@ describe('isISBN', () => {
     })
     it('rejects ISBN-13 with wrong check digit', () => {
       expect(isISBN('9780596520688')).toBe(false)
+    })
+    it('requires an assigned Bookland prefix', () => {
+      expect(isISBN('0000000000000', 13)).toBe(false)
+      expect(isISBN('1234567890128', 13)).toBe(false)
     })
   })
 

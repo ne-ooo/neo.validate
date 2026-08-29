@@ -2,7 +2,9 @@ import { bench, describe } from 'vitest'
 import validator from 'validator'
 import {
   isEmail,
+  createEmailValidator,
   isURL,
+  createURLValidator,
   isNumeric,
   isInt,
   isFloat,
@@ -22,6 +24,8 @@ describe('neo.validate vs validator.js - Performance Comparison', () => {
   describe('Email Validation', () => {
     const validEmail = 'test.user+tag@example.com'
     const invalidEmail = 'invalid@email'
+    const emailPolicy = { hostWhitelist: ['example.com'] }
+    const validateEmail = createEmailValidator(emailPolicy)
 
     bench('neo.validate - isEmail (valid)', () => {
       isEmail(validEmail)
@@ -38,11 +42,21 @@ describe('neo.validate vs validator.js - Performance Comparison', () => {
     bench('validator.js - isEmail (invalid)', () => {
       validator.isEmail(invalidEmail)
     })
+
+    bench('neo.validate - isEmail (repeated policy)', () => {
+      isEmail(validEmail, emailPolicy)
+    })
+
+    bench('neo.validate - compiled email policy', () => {
+      validateEmail(validEmail)
+    })
   })
 
   describe('URL Validation', () => {
     const validURL = 'https://example.com/path?query=value#hash'
     const invalidURL = 'not a url'
+    const urlPolicy = { protocols: ['https'], allowedHosts: ['example.com'] }
+    const validateURL = createURLValidator(urlPolicy)
 
     bench('neo.validate - isURL (valid)', () => {
       isURL(validURL)
@@ -58,6 +72,14 @@ describe('neo.validate vs validator.js - Performance Comparison', () => {
 
     bench('validator.js - isURL (invalid)', () => {
       validator.isURL(invalidURL)
+    })
+
+    bench('neo.validate - isURL (repeated policy)', () => {
+      isURL(validURL, urlPolicy)
+    })
+
+    bench('neo.validate - compiled URL policy', () => {
+      validateURL(validURL)
     })
   })
 

@@ -1,4 +1,5 @@
 import type { LengthOptions } from '../types.js'
+import { INVALID_OPTION, readOwnDataOption } from '../options.js'
 
 const ASCII_ALPHA_PATTERN = /^[A-Za-z]+$/
 const ASCII_ALPHANUMERIC_PATTERN = /^[A-Za-z0-9]+$/
@@ -12,6 +13,7 @@ const LANGUAGE_SCRIPTS: Readonly<Record<string, readonly string[]>> = {
   da: ['Latin'],
   de: ['Latin'],
   el: ['Greek'],
+  en: ['Latin'],
   eo: ['Latin'],
   es: ['Latin'],
   fa: ['Arabic'],
@@ -49,7 +51,9 @@ const LANGUAGE_SCRIPTS: Readonly<Record<string, readonly string[]>> = {
   vi: ['Latin'],
   zh: ['Han', 'Bopomofo'],
 }
-const localePatternCache = new Map<string, RegExp>()
+const MAX_LOCALE_LENGTH = 128
+const MAX_LOCALE_CACHE_ENTRIES = 64
+const localePatternCache = new Map<string, RegExp | null>()
 const resolvedLocalePatternCache = new Map<string, RegExp | null>()
 
 /**
@@ -123,26 +127,36 @@ export function isLength(str: string, options: LengthOptions = {}): boolean {
     return false
   }
 
-  if (!isLengthOptions(options)) return false
+  const resolvedOptions = resolveLengthOptions(options)
+  if (!resolvedOptions) return false
 
-  const { min = 0, max = Infinity } = options
+  const { min, max } = resolvedOptions
+  if (min === 0 && max === Infinity) return true
+  if (str.length < min) return false
+  if (min === 0 && str.length <= max) return true
+
   let length = 0
   for (const _character of str) {
     length += 1
     if (length > max) return false
+    if (max === Infinity && length >= min) return true
   }
 
   return length >= min && length <= max
 }
 
 function getLocalePattern(locale: string, alphanumeric: boolean): RegExp | null {
+  if (locale.length > MAX_LOCALE_LENGTH) return null
   if (locale === 'en-US') {
     return alphanumeric ? ASCII_ALPHANUMERIC_PATTERN : ASCII_ALPHA_PATTERN
   }
 
   const resolvedCacheKey = `${alphanumeric ? 'alphanumeric' : 'alpha'}:${locale}`
   if (resolvedLocalePatternCache.has(resolvedCacheKey)) {
-    return resolvedLocalePatternCache.get(resolvedCacheKey) ?? null
+    const cached = resolvedLocalePatternCache.get(resolvedCacheKey) ?? null
+    resolvedLocalePatternCache.delete(resolvedCacheKey)
+    resolvedLocalePatternCache.set(resolvedCacheKey, cached)
+    return cached
   }
 
   const latinOverride = locale.toLowerCase().endsWith('@latin')
@@ -155,24 +169,32 @@ function getLocalePattern(locale: string, alphanumeric: boolean): RegExp | null 
     return null
   }
 
-  if (parsedLocale.language === 'en') {
+  const defaultScripts = LANGUAGE_SCRIPTS[parsedLocale.language]
+  if (!defaultScripts) {
+    cacheResolvedLocale(resolvedCacheKey, null)
+    return null
+  }
+
+  const scripts = latinOverride
+    ? ['Latin']
+    : parsedLocale.script
+      ? [parsedLocale.script]
+      : defaultScripts
+
+  if (
+    parsedLocale.language === 'en' &&
+    (scripts[0] === 'Latin' || scripts[0] === 'Latn')
+  ) {
     const pattern = alphanumeric ? ASCII_ALPHANUMERIC_PATTERN : ASCII_ALPHA_PATTERN
     cacheResolvedLocale(resolvedCacheKey, pattern)
     return pattern
   }
 
-  const scripts =
-    parsedLocale.language === 'sr' && (parsedLocale.script === 'Latn' || latinOverride)
-      ? ['Latin']
-      : LANGUAGE_SCRIPTS[parsedLocale.language]
-  if (!scripts) {
-    cacheResolvedLocale(resolvedCacheKey, null)
-    return null
-  }
-
   const cacheKey = `${alphanumeric ? 'alphanumeric' : 'alpha'}:${scripts.join(',')}`
-  const cached = localePatternCache.get(cacheKey)
-  if (cached) {
+  if (localePatternCache.has(cacheKey)) {
+    const cached = localePatternCache.get(cacheKey) ?? null
+    localePatternCache.delete(cacheKey)
+    localePatternCache.set(cacheKey, cached)
     cacheResolvedLocale(resolvedCacheKey, cached)
     return cached
   }
@@ -181,26 +203,58 @@ function getLocalePattern(locale: string, alphanumeric: boolean): RegExp | null 
   if (alphanumeric) scriptParts.push('[0-9]')
   const scriptPattern = scriptParts.join('|')
   const allowedCategory = alphanumeric ? '[\\p{L}\\p{N}]' : '\\p{L}'
-  const pattern = new RegExp(
-    `^(?:(?=${allowedCategory})(?:${scriptPattern})\\p{M}*)+$`,
-    'u'
-  )
-  localePatternCache.set(cacheKey, pattern)
+  let pattern: RegExp
+  try {
+    pattern = new RegExp(
+      `^(?:(?=${allowedCategory})(?:${scriptPattern})\\p{M}*)+$`,
+      'u'
+    )
+  } catch {
+    cacheLocalePattern(cacheKey, null)
+    cacheResolvedLocale(resolvedCacheKey, null)
+    return null
+  }
+  cacheLocalePattern(cacheKey, pattern)
   cacheResolvedLocale(resolvedCacheKey, pattern)
   return pattern
 }
 
 function cacheResolvedLocale(key: string, pattern: RegExp | null): void {
-  if (resolvedLocalePatternCache.size >= 64) resolvedLocalePatternCache.clear()
+  if (resolvedLocalePatternCache.has(key)) resolvedLocalePatternCache.delete(key)
+  if (resolvedLocalePatternCache.size >= MAX_LOCALE_CACHE_ENTRIES) {
+    const oldestKey = resolvedLocalePatternCache.keys().next().value
+    if (oldestKey !== undefined) resolvedLocalePatternCache.delete(oldestKey)
+  }
   resolvedLocalePatternCache.set(key, pattern)
 }
 
-function isLengthOptions(value: unknown): value is LengthOptions {
-  if (!value || typeof value !== 'object') return false
-  const { min, max } = value as LengthOptions
-  if (min !== undefined && (!Number.isSafeInteger(min) || min < 0)) return false
-  if (max !== undefined && (!Number.isSafeInteger(max) || max < 0)) return false
-  return min === undefined || max === undefined || min <= max
+function cacheLocalePattern(key: string, pattern: RegExp | null): void {
+  if (localePatternCache.has(key)) localePatternCache.delete(key)
+  if (localePatternCache.size >= MAX_LOCALE_CACHE_ENTRIES) {
+    const oldestKey = localePatternCache.keys().next().value
+    if (oldestKey !== undefined) localePatternCache.delete(oldestKey)
+  }
+  localePatternCache.set(key, pattern)
+}
+
+function resolveLengthOptions(value: unknown): { min: number; max: number } | null {
+  const min = readOwnDataOption(value, 'min', undefined)
+  const max = readOwnDataOption(value, 'max', undefined)
+  if (min === INVALID_OPTION || max === INVALID_OPTION) return null
+  if (
+    min !== undefined &&
+    (typeof min !== 'number' || !Number.isSafeInteger(min) || min < 0)
+  ) {
+    return null
+  }
+  if (
+    max !== undefined &&
+    (typeof max !== 'number' || !Number.isSafeInteger(max) || max < 0)
+  ) {
+    return null
+  }
+  if (min !== undefined && max !== undefined && min > max) return null
+  return { min: min ?? 0, max: max ?? Infinity }
 }
 
 /**

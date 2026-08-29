@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 env:
-  LPM_VERSION: "0.74.1"
-  LPM_INSTALLER_SHA256: "82776d71eac5201349617303a960b88f0f1d2d249fe07c758d3b1162e362434f"
+  LPM_VERSION: "0.76.5"
+  LPM_INSTALLER_SHA256: "edaadae414b2880b99111759a4d3338c9c92a4ec1884874fcb84aad7a8627811"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}

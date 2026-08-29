@@ -1,4 +1,5 @@
 import type { CreditCardOptions, CreditCardProvider } from '../types.js'
+import { INVALID_OPTION, readOwnDataOption } from '../options.js'
 
 const cardPatterns: Record<CreditCardProvider, RegExp> = {
   amex: /^3[47][0-9]{13}$/,
@@ -39,11 +40,12 @@ export function isCreditCard(str: string, options: CreditCardOptions = {}): bool
     return false
   }
 
-  if (!options || typeof options !== 'object') return false
-  const { provider } = options
+  const provider = readOwnDataOption(options, 'provider', undefined)
   if (
-    provider !== undefined &&
-    !Object.prototype.hasOwnProperty.call(cardPatterns, provider)
+    provider === INVALID_OPTION ||
+    (provider !== undefined &&
+      (typeof provider !== 'string' ||
+        !Object.prototype.hasOwnProperty.call(cardPatterns, provider)))
   ) {
     return false
   }
@@ -56,8 +58,8 @@ export function isCreditCard(str: string, options: CreditCardOptions = {}): bool
     return false
   }
 
-  const matchesProvider = provider
-    ? cardPatterns[provider].test(sanitized)
+  const matchesProvider = provider !== undefined
+    ? cardPatterns[provider as CreditCardProvider].test(sanitized)
     : supportedCardPatterns.some((pattern) => pattern.test(sanitized))
   if (!matchesProvider) return false
 

@@ -8,9 +8,14 @@
   "sideEffects": false,
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./package.json": "./package.json"
   },
@@ -19,7 +24,7 @@
   "types": "./dist/index.d.ts",
   "files": [
     "dist",
-    ".lpm",
+    ".lpm/skills",
     "README.md",
     "SECURITY.md",
     "BENCHMARKS.md",
@@ -34,7 +39,7 @@
     "test:watch": "vitest",
     "bench": "vitest bench --run --no-file-parallelism --maxWorkers=1",
     "typecheck": "tsc --noEmit",
-    "release:check": "lpm run typecheck && lpm run test:coverage && lpm run build && lpm run test:package && lpm audit --level moderate --fail-on vuln",
+    "release:check": "lpm run typecheck && lpm run test:coverage && lpm run build && lpm run test:package && lpm audit --level low --fail-on vuln",
     "prepublishOnly": "lpm run release:check"
   },
   "keywords": [
@@ -70,5 +75,10 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "lpm": {
+    "overrides": {
+      "tsup>esbuild": "0.28.2"
+    }
   }
 }

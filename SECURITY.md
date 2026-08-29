@@ -18,6 +18,8 @@ Use an encoder that is made for the output context.
 
 `isURL` checks URL syntax and the selected options. It does not make a URL safe to fetch or open.
 
+The validator rejects raw backslashes and ASCII control characters to reduce differences between URL parsers. Pass the parsed and canonicalized URL to downstream code instead of reparsing the original input.
+
 WARNING: Do not use `isURL` as the only SSRF control. DNS changes and redirects can reach a prohibited address.
 
 Resolve the host before each request. Reject private and reserved addresses when the application does not require them.
@@ -48,7 +50,15 @@ Keep the original address for delivery. Use the normalized address only for a do
 
 Email, URL, JSON, and JWT validation use default input limits. Use `maxLength` to select a different application limit.
 
-Set a request-body limit before validation. This package cannot prevent allocation of the input string by the caller.
+Numeric, Base64, date, string, and sanitizer APIs do not all have built-in length limits. Their work is linear, but a sufficiently large input can still block an event loop.
+
+Set request-body and field limits before validation or normalization. This package cannot prevent allocation of the input string by the caller.
+
+## Unicode identity
+
+Unicode-aware alphabetic, email, and hostname checks accept characters from supported scripts. They do not detect visually confusable characters or prove that two identifiers belong to the same person or organization.
+
+Use a documented canonicalization and confusable-character policy for security-sensitive usernames, domains, and allowlists. Show the original value when a person must verify an identity.
 
 ## Credit-card validation
 

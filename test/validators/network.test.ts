@@ -56,8 +56,24 @@ describe('isIP', () => {
     it('accepts with version 6 constraint', () => {
       expect(isIP('::1', 6)).toBe(true)
     })
+    it('accepts full and compressed IPv4-embedded addresses', () => {
+      expect(isIP('1:2:3:4:5:6:192.0.2.1', 6)).toBe(true)
+      expect(isIP('1:2:3:4::192.0.2.1', 6)).toBe(true)
+      expect(isIP('::ffff:192.0.2.1', 6)).toBe(true)
+    })
+    it('accepts scoped addresses case-insensitively', () => {
+      expect(isIP('fe80::1%eth0', 6)).toBe(true)
+      expect(isIP('FE80::%en0', 6)).toBe(true)
+    })
     it('rejects IPv6 when version is 4', () => {
       expect(isIP('::1', 4)).toBe(false)
+    })
+    it('rejects malformed compression, scopes, and mixed-address placement', () => {
+      expect(isIP('fe80:%eth0', 6)).toBe(false)
+      expect(isIP('fe80:::%eth0', 6)).toBe(false)
+      expect(isIP('fe80::1%', 6)).toBe(false)
+      expect(isIP('1::2::3', 6)).toBe(false)
+      expect(isIP('192.0.2.1::', 6)).toBe(false)
     })
   })
 
@@ -118,6 +134,19 @@ describe('isMACAddress', () => {
     })
     it('rejects 12-char hex without noSeparator option', () => {
       expect(isMACAddress('001B638445E6')).toBe(false)
+    })
+    it('adds the compact format without disabling enabled separator formats', () => {
+      expect(isMACAddress('00:1B:63:84:45:E6', { noSeparator: true })).toBe(true)
+      expect(isMACAddress('00-1B-63-84-45-E6', { noSeparator: true })).toBe(true)
+      expect(
+        isMACAddress('001B.6384.45E6', { noSeparator: true, allowDot: true })
+      ).toBe(true)
+      expect(
+        isMACAddress('00:1B:63:84:45:E6', {
+          noSeparator: true,
+          allowColon: false,
+        })
+      ).toBe(false)
     })
   })
 

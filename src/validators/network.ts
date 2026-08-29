@@ -1,9 +1,10 @@
 import type { MACAddressOptions } from '../types.js'
+import { INVALID_OPTION, readOwnDataOption } from '../options.js'
 
 const IPV4_PATTERN =
   /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[0-9])$/
-const IPV6_PATTERN =
-  /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/
+const IPV6_HEXTET_PATTERN = /^[0-9A-Fa-f]{1,4}$/
+const IPV6_ZONE_PATTERN = /^[0-9A-Za-z_.~-]+$/
 const MAC_NO_SEPARATOR_PATTERN = /^[0-9A-Fa-f]{12}$/
 const MAC_COLON_PATTERN = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/
 const MAC_HYPHEN_PATTERN = /^([0-9A-Fa-f]{2}-){5}[0-9A-Fa-f]{2}$/
@@ -59,8 +60,40 @@ function isIPv4(str: string): boolean {
  * Check if string is a valid IPv6 address
  */
 function isIPv6(str: string): boolean {
-  // Simplified IPv6 validation (supports standard and compressed formats)
-  return IPV6_PATTERN.test(str)
+  const zoneSeparatorIndex = str.indexOf('%')
+  let address = str
+  if (zoneSeparatorIndex !== -1) {
+    if (zoneSeparatorIndex !== str.lastIndexOf('%')) return false
+    const zone = str.slice(zoneSeparatorIndex + 1)
+    if (!IPV6_ZONE_PATTERN.test(zone)) return false
+    address = str.slice(0, zoneSeparatorIndex)
+  }
+
+  const compressionIndex = address.indexOf('::')
+  const hasCompression = compressionIndex !== -1
+  if (hasCompression && compressionIndex !== address.lastIndexOf('::')) return false
+
+  const leftText = hasCompression ? address.slice(0, compressionIndex) : address
+  const rightText = hasCompression ? address.slice(compressionIndex + 2) : ''
+  const leftParts = leftText ? leftText.split(':') : []
+  const rightParts = rightText ? rightText.split(':') : []
+  const parts = [...leftParts, ...rightParts]
+  if (parts.some((part) => part.length === 0)) return false
+
+  let unitCount = 0
+  for (let index = 0; index < parts.length; index++) {
+    const part = parts[index]!
+    if (part.includes('.')) {
+      if (index !== parts.length - 1 || !address.endsWith(part) || !isIPv4(part)) return false
+      unitCount += 2
+      continue
+    }
+
+    if (!IPV6_HEXTET_PATTERN.test(part)) return false
+    unitCount += 1
+  }
+
+  return hasCompression ? unitCount < 8 : unitCount === 8
 }
 
 /**
@@ -83,21 +116,21 @@ export function isMACAddress(str: string, options: MACAddressOptions = {}): bool
     return false
   }
 
-  if (!options || typeof options !== 'object') return false
-  const {
-    noSeparator = false,
-    allowColon = true,
-    allowHyphen = true,
-    allowDot = false,
-  } = options
-  if (![noSeparator, allowColon, allowHyphen, allowDot].every((value) => typeof value === 'boolean')) {
+  const noSeparator = readOwnDataOption(options, 'noSeparator', false)
+  const allowColon = readOwnDataOption(options, 'allowColon', true)
+  const allowHyphen = readOwnDataOption(options, 'allowHyphen', true)
+  const allowDot = readOwnDataOption(options, 'allowDot', false)
+  if (
+    [noSeparator, allowColon, allowHyphen, allowDot].some(
+      (value) => value === INVALID_OPTION || typeof value !== 'boolean'
+    )
+  ) {
     return false
   }
 
-  // No separator (12 hex characters)
-  if (noSeparator) {
-    return MAC_NO_SEPARATOR_PATTERN.test(str)
-  }
+  // No separator (12 hex characters). This option adds a format; it does not
+  // disable the independently configured separated formats.
+  if (noSeparator && MAC_NO_SEPARATOR_PATTERN.test(str)) return true
 
   // Colon separator (00:1B:63:84:45:E6)
   if (allowColon && MAC_COLON_PATTERN.test(str)) {

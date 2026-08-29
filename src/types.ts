@@ -4,6 +4,11 @@
 export type ValidatorResult = boolean
 
 /**
+ * Supported RFC 9562 UUID versions
+ */
+export type UUIDVersion = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
+
+/**
  * Email validation options
  */
 export interface EmailOptions {
@@ -19,9 +24,9 @@ export interface EmailOptions {
   requireTld?: boolean
   /** Blacklisted characters */
   blacklistedChars?: string
-  /** Blacklist specific host domains */
+  /** Blacklist specific host domains (maximum: 10,000 entries) */
   hostBlacklist?: string[]
-  /** Whitelist specific host domains */
+  /** Whitelist specific host domains (maximum: 10,000 entries) */
   hostWhitelist?: string[]
 }
 
@@ -31,7 +36,7 @@ export interface EmailOptions {
 export interface URLOptions {
   /** Maximum input length in UTF-16 code units (default: 2084) */
   maxLength?: number
-  /** Allowed protocols (default: ['http', 'https', 'ftp']) */
+  /** Allowed protocols (default: ['http', 'https', 'ftp']; maximum: 10,000 entries) */
   protocols?: string[]
   /** Require protocol in URL */
   requireProtocol?: boolean
@@ -49,9 +54,9 @@ export interface URLOptions {
   allowFragments?: boolean
   /** Allow data URLs */
   allowDataUrl?: boolean
-  /** Allowed host domains */
+  /** Allowed host domains (maximum: 10,000 entries) */
   allowedHosts?: string[]
-  /** Disallowed host domains */
+  /** Disallowed host domains (maximum: 10,000 entries) */
   disallowedHosts?: string[]
 }
 

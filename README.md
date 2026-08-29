@@ -4,7 +4,7 @@
 
 ## Why neo.validate?
 
-- **Zero dependencies** — no runtime dependencies, nothing to audit
+- **Zero runtime dependencies** — no transitive dependency graph in the published runtime
 - **Tree-shakeable** — import only `isEmail`, bundle only `isEmail`
 - **TypeScript-first** — strict mode, full type inference
 - **Familiar API** — named validator functions with explicit TypeScript options
@@ -23,7 +23,7 @@ import { isEmail, isURL, isUUID } from "@lpm.dev/neo.validate";
 
 isEmail("user@example.com"); // true
 isURL("https://lpm.dev"); // true
-isUUID("550e8400-..."); // true
+isUUID("550e8400-e29b-41d4-a716-446655440000"); // true
 ```
 
 ## API Reference
@@ -31,7 +31,7 @@ isUUID("550e8400-..."); // true
 ### Email
 
 ```typescript
-import { isEmail } from "@lpm.dev/neo.validate";
+import { createEmailValidator, isEmail } from "@lpm.dev/neo.validate";
 
 isEmail("user@example.com"); // true
 isEmail("user+tag@sub.example.com"); // true
@@ -41,12 +41,19 @@ isEmail("user@example.com", {
   requireTld: true, // require TLD (default: true)
   maxLength: 254, // total input limit (default: 254)
 });
+
+const isCompanyEmail = createEmailValidator({
+  hostWhitelist: ["example.com"],
+});
+isCompanyEmail("user@example.com"); // true
 ```
+
+Use `createEmailValidator` when the same policy validates many values. It validates and snapshots the options once.
 
 ### URL
 
 ```typescript
-import { isURL } from "@lpm.dev/neo.validate";
+import { createURLValidator, isURL } from "@lpm.dev/neo.validate";
 
 isURL("https://example.com"); // true
 isURL("http://localhost:3000"); // true
@@ -58,7 +65,15 @@ isURL("https://example.com", {
   requireTld: true, // require TLD
   maxLength: 2084, // total input limit (default: 2084)
 });
+
+const isApprovedURL = createURLValidator({
+  protocols: ["https"],
+  allowedHosts: ["example.com"],
+});
+isApprovedURL("https://example.com/docs"); // true
 ```
+
+Use `createURLValidator` for repeated policy checks. Later mutations to the input policy arrays do not change a compiled validator.
 
 ### Numeric
 
@@ -95,7 +110,7 @@ isLowercase("hello"); // true
 isUppercase("HELLO"); // true
 ```
 
-The locale selects a Unicode script. English locales use ASCII letters. An unsupported locale returns `false`.
+The locale selects a Unicode script. Explicit script subtags such as `az-Cyrl` and `pa-Arab` take precedence over language defaults. English Latin locales use ASCII letters. An unsupported locale returns `false`.
 
 ### Network
 
@@ -106,6 +121,7 @@ isIP("192.168.1.1"); // true (IPv4 or IPv6)
 isIP("192.168.1.1", 4); // true (IPv4 only)
 isIP("::1", 6); // true (IPv6 only)
 isMACAddress("00:1A:2B:3C:4D:5E"); // true
+isMACAddress("001A2B3C4D5E", { noSeparator: true }); // true
 isPort("8080"); // true
 isPort("99999"); // false
 ```
@@ -130,6 +146,7 @@ isHexColor("#ff0000"); // true
 isHexColor("#f00"); // true
 isISO8601("2024-01-15T10:30:00Z"); // true
 isRFC3339("2024-01-15T10:30:00Z"); // true
+isRFC3339("2016-12-31T23:59:60Z"); // true
 ```
 
 `isISO8601` supports calendar dates and date-times with seconds. It does not support every ISO 8601 representation.
@@ -140,13 +157,17 @@ isRFC3339("2024-01-15T10:30:00Z"); // true
 import { isUUID, isISBN, isMongoId, isJWT } from "@lpm.dev/neo.validate";
 
 isUUID("550e8400-e29b-41d4-a716-446655440000"); // true
-isUUID("550e8400-...", 4); // true (v4 only)
+isUUID("550e8400-e29b-41d4-a716-446655440000", 4); // true (v4 only)
+isUUID("019535d9-3df7-7a28-8a7f-9f4bc7c8e101", 7); // true (v7)
+isUUID("00000000-0000-0000-0000-000000000000"); // true (nil UUID)
 isISBN("978-3-16-148410-0"); // true
 isMongoId("507f1f77bcf86cd799439011"); // true
 isJWT("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl"); // true
 ```
 
 `isJWT` checks the encoded JSON structure. It does not check the signature, expiry, issuer, audience, or claims.
+
+Generic UUID validation supports RFC 9562 versions 1 through 8, nil, and max UUIDs. ISBN-13 validation requires a `978` or `979` Bookland prefix.
 
 ### Credit Card
 
