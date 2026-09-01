@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  createEmailValidator,
+  createURLValidator,
   isAlpha,
   isAlphanumeric,
   isBase64,
@@ -22,6 +24,13 @@ import {
 } from '../../src/index.js'
 
 describe('runtime argument contract', () => {
+  it('preserves the public function arity', () => {
+    expect(isEmail.length).toBe(1)
+    expect(isURL.length).toBe(1)
+    expect(createEmailValidator.length).toBe(0)
+    expect(createURLValidator.length).toBe(0)
+  })
+
   it('returns false for malformed validator options', () => {
     const calls = [
       () => isEmail('user@example.com', null as any),

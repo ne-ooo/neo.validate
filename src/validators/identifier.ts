@@ -29,7 +29,7 @@ const utf8Decoder = new TextDecoder('utf-8', { fatal: true })
  * ```
  */
 export function isUUID(str: string, version?: UUIDVersion): boolean {
-  if (typeof str !== 'string' || str.length === 0) {
+  if (typeof str !== 'string' || str.length !== 36) {
     return false
   }
 

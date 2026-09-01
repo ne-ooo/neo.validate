@@ -20,13 +20,15 @@ Use an encoder that is made for the output context.
 
 The validator rejects raw backslashes and ASCII control characters to reduce differences between URL parsers. Pass the parsed and canonicalized URL to downstream code instead of reparsing the original input.
 
+Protocol-less mode parses input that already starts with an absolute URL scheme as supplied. The configured protocol and host policy must accept that URL; it is never reinterpreted as synthetic HTTP.
+
 WARNING: Do not use `isURL` as the only SSRF control. DNS changes and redirects can reach a prohibited address.
 
 Resolve the host before each request. Reject private and reserved addresses when the application does not require them.
 
 Check each redirect before the application follows it. Use an exact allowlist when the destination set is known.
 
-The `allowDataUrl` option accepts all valid data URL media types. It also accepts active HTML content.
+The `allowDataUrl` option requires the data URL comma delimiter and valid Base64 when the `;base64` marker is present. It accepts all valid data URL media types, including active HTML content.
 
 WARNING: Do not display an untrusted data URL in an active browser context. Script execution can occur.
 
@@ -44,11 +46,13 @@ Use a JWT library that checks the signature and required claims.
 
 `normalizeEmail` changes provider-specific addresses. These changes can merge two input strings into one result.
 
+With the default lowercase policy, it converts the domain to lowercase IDNA ASCII and removes a trailing DNS root dot. It preserves the complete input when the domain cannot produce a valid DNS name.
+
 Keep the original address for delivery. Use the normalized address only for a documented comparison policy.
 
 ## Input limits
 
-Email, URL, JSON, and JWT validation use default input limits. Use `maxLength` to select a different application limit.
+Email, URL, JSON, and JWT validation use default input limits. IPv6 rejects an overlong address portion before splitting it, and UUID rejects input outside its fixed length. Use `maxLength` to select a different application limit where that option is available.
 
 Numeric, Base64, date, string, and sanitizer APIs do not all have built-in length limits. Their work is linear, but a sufficiently large input can still block an event loop.
 

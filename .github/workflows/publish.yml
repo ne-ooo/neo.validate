@@ -14,6 +14,8 @@ concurrency:
 
 env:
   LPM_VERSION: "0.76.5"
+  LPM_INSTALLER_SHA256: "edaadae414b2880b99111759a4d3338c9c92a4ec1884874fcb84aad7a8627811"
+  LPM_LINUX_X64_SHA256: "a9734d76291cf1b160db57e9229f53697c8d5c7f60b815b059eaec62ad9f7394"
 
 jobs:
   verify:
@@ -32,7 +34,14 @@ jobs:
           node-version: "24.11.0"
 
       - name: Install LPM
-        run: npm install --global "@lpm-registry/cli@${LPM_VERSION}"
+        env:
+          LPM_INSTALL_VERSION: v${{ env.LPM_VERSION }}
+        run: |
+          curl --fail --silent --show-error --location "https://raw.githubusercontent.com/lpm-dev/rust-client/v${LPM_VERSION}/install.sh" --output "$RUNNER_TEMP/install-lpm.sh"
+          echo "${LPM_INSTALLER_SHA256}  $RUNNER_TEMP/install-lpm.sh" | sha256sum --check --strict
+          sh "$RUNNER_TEMP/install-lpm.sh"
+          echo "$HOME/.lpm/bin" >> "$GITHUB_PATH"
+          "$HOME/.lpm/bin/lpm" --version
 
       - name: Install locked dependencies
         run: >-
@@ -61,6 +70,22 @@ jobs:
       - name: Validate publish contents
         run: lpm publish --check --yes
 
+      - name: Stage the verified LPM executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/verified-lpm"
+          echo "${LPM_LINUX_X64_SHA256}  $HOME/.lpm/bin/lpm" | sha256sum --check --strict
+          cp "$HOME/.lpm/bin/lpm" "$RUNNER_TEMP/verified-lpm/lpm"
+
+      - name: Upload verified LPM executable
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verified-lpm-${{ github.sha }}
+          path: ${{ runner.temp }}/verified-lpm
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Upload verified distribution
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -86,8 +111,21 @@ jobs:
         with:
           node-version: "24.11.0"
 
-      - name: Install LPM
-        run: npm install --global "@lpm-registry/cli@${LPM_VERSION}"
+      - name: Download verified LPM executable
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: verified-lpm-${{ github.sha }}
+          path: ${{ runner.temp }}/verified-lpm
+
+      - name: Activate verified LPM executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/verified-lpm"
+          echo "${LPM_LINUX_X64_SHA256}  lpm" | sha256sum --check --strict
+          chmod +x lpm
+          echo "$RUNNER_TEMP/verified-lpm" >> "$GITHUB_PATH"
+          ./lpm --version
 
       - name: Download verified distribution
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

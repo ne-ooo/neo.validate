@@ -220,10 +220,15 @@ describe('isEmail', () => {
       expect(isEmail('a@example.123')).toBe(false)
       expect(isEmail('a@example.com:443')).toBe(false)
       expect(isEmail('a@example.com?query')).toBe(false)
+      expect(isEmail('a@example.1', { requireTld: false })).toBe(false)
+      expect(isEmail('a@example.0x', { requireTld: false })).toBe(false)
+      expect(isEmail('a@example.0X', { requireTld: false })).toBe(false)
     })
 
     it('should enforce the local-part byte limit', () => {
       expect(isEmail(`${'a'.repeat(65)}@example.com`)).toBe(false)
+      expect(isEmail(`${'é'.repeat(32)}@example.com`)).toBe(true)
+      expect(isEmail(`${'é'.repeat(33)}@example.com`)).toBe(false)
     })
 
     it('should enforce the configurable total-input limit', () => {

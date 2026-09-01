@@ -140,6 +140,18 @@ describe('isURL', () => {
       expect(
         isURL('data:text/plain;base64,SGVsbG8=', { allowDataUrl: true })
       ).toBe(true)
+      expect(isURL('data:,', { allowDataUrl: true })).toBe(true)
+      expect(isURL('data:;base64,', { allowDataUrl: true })).toBe(true)
+    })
+
+    it('should reject malformed data URLs', () => {
+      expect(isURL('data:', { allowDataUrl: true })).toBe(false)
+      expect(isURL('data:text/plain', { allowDataUrl: true })).toBe(false)
+      expect(isURL('data:text/plain;base64,not-base64!', { allowDataUrl: true })).toBe(false)
+      expect(isURL('data:text/plain;base64;charset=utf-8,SGVsbG8=', { allowDataUrl: true })).toBe(false)
+      expect(isURL('data:text/plain,%ZZ', { allowDataUrl: true })).toBe(false)
+      expect(isURL('data:base64,SGVsbG8=', { allowDataUrl: true })).toBe(false)
+      expect(isURL('data:base64,not-base64!', { allowDataUrl: true })).toBe(false)
     })
 
     it('should respect allowedHosts option', () => {
@@ -194,6 +206,51 @@ describe('isURL', () => {
       ).toBe(false)
       expect(
         isURL('evil.com', { requireProtocol: false, protocols: ['https'] })
+      ).toBe(false)
+    })
+
+    it('should not reinterpret absolute schemes as protocol-less HTTP URLs', () => {
+      const options = { requireProtocol: false, allowedHosts: ['example.com'] }
+      expect(
+        isURL('javascript:alert%281%29%2F%2F@example.com', options)
+      ).toBe(false)
+      expect(
+        isURL(' javascript:alert%281%29%2F%2F@example.com', options)
+      ).toBe(false)
+      expect(
+        createURLValidator(options)('  javascript:alert%281%29%2F%2F@example.com')
+      ).toBe(false)
+      expect(isURL('mailto:user@example.com', options)).toBe(false)
+      expect(isURL('urn:example:test', { requireProtocol: false })).toBe(false)
+      expect(isURL('file:/tmp/example.com', options)).toBe(false)
+    })
+
+    it('should parse explicitly allowed absolute schemes as supplied', () => {
+      expect(
+        isURL('file:/tmp/example', { protocols: ['file'], requireHost: false })
+      ).toBe(true)
+      expect(
+        isURL('mailto:user@example.com', {
+          protocols: ['mailto'],
+          requireHost: false,
+        })
+      ).toBe(true)
+      expect(
+        isURL('urn:example:test', { protocols: ['urn'], requireHost: false })
+      ).toBe(true)
+      expect(
+        isURL('urn:example:123', {
+          protocols: ['urn'],
+          requireHost: false,
+          requirePort: true,
+        })
+      ).toBe(false)
+      expect(
+        isURL('mailto:user@example.com:123', {
+          protocols: ['mailto'],
+          requireHost: false,
+          requirePort: true,
+        })
       ).toBe(false)
     })
 

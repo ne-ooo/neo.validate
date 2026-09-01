@@ -1,14 +1,12 @@
 import type { EmailOptions } from '../types.js'
+import { normalizeEmailDomain } from '../email-domain.js'
 import { copyOwnStringArray, INVALID_OPTION, readOwnDataOption } from '../options.js'
+import { exceedsUtf8Length } from '../utf8.js'
 
-const utf8Encoder = new TextEncoder()
 const DISPLAY_NAME_CONTROL_PATTERN = /[\x00-\x1F\x7F]/
 const INVALID_UNQUOTED_DISPLAY_NAME_PATTERN = /[.";<>]/
 const UTF8_LOCAL_PART_PATTERN = /^[\p{L}\p{N}\p{M}!#$%&'*+/=?^_`{|}~.-]+$/u
 const ASCII_LOCAL_PART_PATTERN = /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+$/
-const INVALID_DOMAIN_CHARACTER_PATTERN = /[^\p{L}\p{N}\p{M}.-]/u
-const DOMAIN_LABEL_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i
-const TLD_PATTERN = /^(?:[a-z]{2,63}|xn--[a-z0-9-]{2,59})$/i
 const DEFAULT_MAX_EMAIL_LENGTH = 254
 const ALWAYS_INVALID_EMAIL = (_str: string): boolean => false
 
@@ -27,12 +25,17 @@ const ALWAYS_INVALID_EMAIL = (_str: string): boolean => false
  * isEmail('test@spam.com', { hostBlacklist: ['spam.com'] }) // false
  * ```
  */
-export function isEmail(str: string, options: EmailOptions = {}): boolean {
+export function isEmail(
+  str: string,
+  options: EmailOptions | undefined = undefined
+): boolean {
   if (typeof str !== 'string' || str.length === 0) {
     return false
   }
 
-  const resolvedOptions = resolveEmailOptions(options)
+  const resolvedOptions = options === undefined
+    ? DEFAULT_RESOLVED_EMAIL_OPTIONS
+    : resolveEmailOptions(options)
   return resolvedOptions ? validateEmail(str, resolvedOptions) : false
 }
 
@@ -42,9 +45,11 @@ export function isEmail(str: string, options: EmailOptions = {}): boolean {
  * Invalid options produce a validator that always returns false.
  */
 export function createEmailValidator(
-  options: EmailOptions = {}
+  options: EmailOptions | undefined = undefined
 ): (str: string) => boolean {
-  const resolvedOptions = resolveEmailOptions(options)
+  const resolvedOptions = options === undefined
+    ? DEFAULT_RESOLVED_EMAIL_OPTIONS
+    : resolveEmailOptions(options)
   return resolvedOptions
     ? (str: string) => validateEmail(str, resolvedOptions)
     : ALWAYS_INVALID_EMAIL
@@ -60,6 +65,8 @@ interface ResolvedEmailOptions {
   hostBlacklist: ReadonlySet<string>
   hostWhitelist: ReadonlySet<string>
 }
+
+const DEFAULT_RESOLVED_EMAIL_OPTIONS = Object.freeze(resolveEmailOptions({})!)
 
 function validateEmail(str: string, options: ResolvedEmailOptions): boolean {
   if (typeof str !== 'string' || str.length === 0) return false
@@ -86,14 +93,19 @@ function validateEmail(str: string, options: ResolvedEmailOptions): boolean {
   }
 
   const address = parsedDisplay?.address ?? str
-  if (byteLength(address) > 254) return false
+  if (exceedsUtf8Length(address, 254)) return false
 
   const atIndex = address.indexOf('@')
   if (atIndex <= 0 || atIndex !== address.lastIndexOf('@')) return false
 
   const localPart = address.slice(0, atIndex)
   const rawDomain = address.slice(atIndex + 1)
-  if (byteLength(localPart) > 64 || byteLength(rawDomain) > 254) return false
+  if (
+    exceedsUtf8Length(localPart, 64) ||
+    exceedsUtf8Length(rawDomain, 254)
+  ) {
+    return false
+  }
 
   const localPartPattern = allowUtf8LocalPart
     ? UTF8_LOCAL_PART_PATTERN
@@ -111,7 +123,7 @@ function validateEmail(str: string, options: ResolvedEmailOptions): boolean {
     if (localPart.includes(character)) return false
   }
 
-  const domain = normalizeDomain(rawDomain, requireTld)
+  const domain = normalizeEmailDomain(rawDomain, requireTld)
   if (!domain) return false
 
   if (hostWhitelist.size > 0 && !hostWhitelist.has(domain)) return false
@@ -224,56 +236,12 @@ function isValidQuotedDisplayName(value: string): boolean {
 function normalizeDomains(hosts: string[]): ReadonlySet<string> | null {
   const normalized = new Set<string>()
   for (const host of hosts) {
-    const normalizedHost = normalizeDomain(host, false)
+    const normalizedHost = normalizeEmailDomain(host, false)
     if (!normalizedHost) return null
     normalized.add(normalizedHost)
   }
 
   return normalized
-}
-
-function normalizeDomain(value: string, requireTld: boolean): string | null {
-  if (typeof value !== 'string' || !value) return null
-
-  const withoutTrailingDot = value.endsWith('.') ? value.slice(0, -1) : value
-  if (
-    !withoutTrailingDot ||
-    INVALID_DOMAIN_CHARACTER_PATTERN.test(withoutTrailingDot)
-  ) {
-    return null
-  }
-
-  let asciiDomain: string
-  try {
-    asciiDomain = new URL(`http://${withoutTrailingDot}`).hostname.toLowerCase()
-  } catch {
-    return null
-  }
-
-  if (!asciiDomain || asciiDomain.length > 253) return null
-  const labels = asciiDomain.split('.')
-  if (requireTld && labels.length < 2) return null
-  if (
-    labels.some(
-      (label) =>
-        label.length === 0 ||
-        label.length > 63 ||
-        !DOMAIN_LABEL_PATTERN.test(label)
-    )
-  ) {
-    return null
-  }
-
-  if (requireTld) {
-    const tld = labels.at(-1) ?? ''
-    if (!TLD_PATTERN.test(tld)) return null
-  }
-
-  return asciiDomain
-}
-
-function byteLength(value: string): number {
-  return utf8Encoder.encode(value).length
 }
 
 function isPositiveInteger(value: unknown): value is number {

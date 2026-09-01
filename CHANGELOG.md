@@ -25,6 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Ignore inherited validator policies and reject accessors or revoked proxies without throwing
 - Remove the locked esbuild development-server advisory with a scoped override
 - Replace truncated UUID examples with executable values
+- Reject absolute schemes disguised as protocol-less URLs and require valid data URL structure
+- Canonicalize normalized email domains with IDNA and preserve domains that exceed DNS limits
+- Bound fixed-format IPv6 address and UUID rejection before allocation
 
 ### Changed
 
@@ -32,6 +35,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/).
 - Gate releases on low-severity advisories and a reviewed publish-file allowlist
 - Isolate build and test dependencies from the OIDC-enabled publish job
 - Align CI and publishing on the lockfile-compatible LPM CLI release
+- Reuse resolved default email and URL policies and skip UTF-8 allocation for ASCII email lengths
+- Transfer the verified LPM executable into the OIDC job instead of installing package lifecycle code there
 
 ## [1.2.0] - 2026-08-11
 

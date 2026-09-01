@@ -72,6 +72,8 @@ isURL('https://example.com:8080', { requirePort: true })   // true
 
 `isURL` checks syntax. It does not make a URL safe to open, redirect to, or fetch.
 
+Protocol-less mode rejects ambiguous bare `host:port` input. Include an explicit scheme when a URL contains a port. Other absolute schemes are accepted only when `protocols` explicitly enables them and their host policy is satisfied.
+
 ## Numeric Validators
 
 ```typescript
@@ -248,6 +250,7 @@ import { normalizeEmail } from '@lpm.dev/neo.validate'
 normalizeEmail('Test.User+tag@Gmail.com')    // 'testuser@gmail.com'
 normalizeEmail('User+tag@Outlook.com')       // 'user@outlook.com'
 normalizeEmail('User-tag@Yahoo.com')         // 'user@yahoo.com'
+normalizeEmail('User@éxample.com')           // 'user@xn--xample-9ua.com'
 
 // Options
 normalizeEmail('Test.User@Gmail.com', { gmailRemoveDots: false })  // 'test.user@gmail.com'
@@ -255,6 +258,8 @@ normalizeEmail('User+tag@gmail.com', { gmailRemoveSubaddress: false })  // 'user
 ```
 
 **NormalizeEmailOptions**: `allLowercase` (default: true), `gmailRemoveDots` (default: true), `gmailRemoveSubaddress` (default: true), `outlookRemoveSubaddress` (default: true), `yahooRemoveSubaddress` (default: true), `gmailConvertGooglemail` (default: true)
+
+The default policy converts valid domains to lowercase IDNA ASCII and removes a trailing DNS root dot. Invalid IDNA/DNS domains are returned unchanged with the rest of the input.
 
 ### Control Character Removal
 

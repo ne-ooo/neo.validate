@@ -5,6 +5,7 @@ const IPV4_PATTERN =
   /^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[0-9])$/
 const IPV6_HEXTET_PATTERN = /^[0-9A-Fa-f]{1,4}$/
 const IPV6_ZONE_PATTERN = /^[0-9A-Za-z_.~-]+$/
+const MAX_IPV6_ADDRESS_LENGTH = 45
 const MAC_NO_SEPARATOR_PATTERN = /^[0-9A-Fa-f]{12}$/
 const MAC_COLON_PATTERN = /^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$/
 const MAC_HYPHEN_PATTERN = /^([0-9A-Fa-f]{2}-){5}[0-9A-Fa-f]{2}$/
@@ -60,7 +61,8 @@ function isIPv4(str: string): boolean {
  * Check if string is a valid IPv6 address
  */
 function isIPv6(str: string): boolean {
-  const zoneSeparatorIndex = str.indexOf('%')
+  const zoneSeparatorIndex = str.slice(0, MAX_IPV6_ADDRESS_LENGTH + 1).indexOf('%')
+  if (zoneSeparatorIndex === -1 && str.length > MAX_IPV6_ADDRESS_LENGTH) return false
   let address = str
   if (zoneSeparatorIndex !== -1) {
     if (zoneSeparatorIndex !== str.lastIndexOf('%')) return false
@@ -68,6 +70,7 @@ function isIPv6(str: string): boolean {
     if (!IPV6_ZONE_PATTERN.test(zone)) return false
     address = str.slice(0, zoneSeparatorIndex)
   }
+  if (address.length > MAX_IPV6_ADDRESS_LENGTH) return false
 
   const compressionIndex = address.indexOf('::')
   const hasCompression = compressionIndex !== -1

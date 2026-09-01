@@ -1,9 +1,12 @@
 import type { URLOptions } from '../types.js'
 import { copyOwnStringArray, INVALID_OPTION, readOwnDataOption } from '../options.js'
+import { isBase64 } from './format.js'
 
 const DATA_URL_PATTERN = /^data:/i
 const URL_PROTOCOL_PATTERN = /^[a-z][a-z\d+.-]*:\/\//i
+const ABSOLUTE_URL_SCHEME_PATTERN = /^[a-z][a-z\d+.-]*:/i
 const UNSAFE_URL_INPUT_PATTERN = /[\\\x00-\x1F\x7F]/
+const INVALID_PERCENT_ENCODING_PATTERN = /%(?![0-9A-Fa-f]{2})/
 const AUTHORITY_END_PATTERN = /[/?#]/
 const BRACKETED_HOST_WITH_PORT_PATTERN = /^\[[^\]]+\]:\d+$/
 const HOST_WITH_PORT_PATTERN = /:\d+$/
@@ -31,12 +34,17 @@ const ALWAYS_INVALID_URL = (_str: string): boolean => false
  * isURL('http://spam.com', { disallowedHosts: ['spam.com'] }) // false
  * ```
  */
-export function isURL(str: string, options: URLOptions = {}): boolean {
+export function isURL(
+  str: string,
+  options: URLOptions | undefined = undefined
+): boolean {
   if (typeof str !== 'string' || str.length === 0) {
     return false
   }
 
-  const resolvedOptions = resolveUrlOptions(options)
+  const resolvedOptions = options === undefined
+    ? DEFAULT_RESOLVED_URL_OPTIONS
+    : resolveUrlOptions(options)
   return resolvedOptions ? validateURL(str, resolvedOptions) : false
 }
 
@@ -45,8 +53,12 @@ export function isURL(str: string, options: URLOptions = {}): boolean {
  *
  * Invalid options produce a validator that always returns false.
  */
-export function createURLValidator(options: URLOptions = {}): (str: string) => boolean {
-  const resolvedOptions = resolveUrlOptions(options)
+export function createURLValidator(
+  options: URLOptions | undefined = undefined
+): (str: string) => boolean {
+  const resolvedOptions = options === undefined
+    ? DEFAULT_RESOLVED_URL_OPTIONS
+    : resolveUrlOptions(options)
   return resolvedOptions
     ? (str: string) => validateURL(str, resolvedOptions)
     : ALWAYS_INVALID_URL
@@ -69,17 +81,25 @@ function validateURL(str: string, resolvedOptions: ResolvedUrlOptions): boolean 
     disallowedHosts,
   } = resolvedOptions
 
-  if (str.length > maxLength || UNSAFE_URL_INPUT_PATTERN.test(str)) return false
-
-  const isDataUrl = DATA_URL_PATTERN.test(str)
-  const hasProtocol = URL_PROTOCOL_PATTERN.test(str)
-
-  if (!isDataUrl && requireProtocol && !hasProtocol) {
+  if (
+    str.length > maxLength ||
+    str.startsWith(' ') ||
+    str.endsWith(' ') ||
+    UNSAFE_URL_INPUT_PATTERN.test(str)
+  ) {
     return false
   }
 
-  // Prefix protocol-less input before parsing. Valid input does not use an exception fallback.
-  const valueToParse = isDataUrl || hasProtocol ? str : `http://${str}`
+  const isDataUrl = DATA_URL_PATTERN.test(str)
+  const hasAbsoluteScheme = ABSOLUTE_URL_SCHEME_PATTERN.test(str)
+
+  if (!isDataUrl && requireProtocol && !hasAbsoluteScheme) {
+    return false
+  }
+
+  // Prefix only input without an absolute scheme. Absolute schemes are parsed
+  // as supplied so protocol and host policy apply to the downstream URL.
+  const valueToParse = hasAbsoluteScheme ? str : `http://${str}`
 
   let url: URL
   try {
@@ -93,6 +113,7 @@ function validateURL(str: string, resolvedOptions: ResolvedUrlOptions): boolean 
 
   if (protocol === 'data') {
     if (!allowDataUrl) return false
+    if (!isValidDataUrl(url)) return false
     if (allowedHosts.size > 0) return false
     if (!allowQueryComponents && hasQueryComponent) return false
     if (!allowFragments && hasFragmentComponent) return false
@@ -103,7 +124,7 @@ function validateURL(str: string, resolvedOptions: ResolvedUrlOptions): boolean 
     return false
   }
 
-  if (requireHost && !url.hostname) {
+  if ((requireHost || requirePort) && !url.hostname) {
     return false
   }
 
@@ -151,6 +172,8 @@ interface ResolvedUrlOptions {
   allowedHosts: ReadonlySet<string>
   disallowedHosts: ReadonlySet<string>
 }
+
+const DEFAULT_RESOLVED_URL_OPTIONS = Object.freeze(resolveUrlOptions({})!)
 
 function resolveUrlOptions(value: unknown): ResolvedUrlOptions | null {
   if (!value || typeof value !== 'object') return null
@@ -236,6 +259,52 @@ function getUrlComponentPresence(url: URL): {
       queryIndex !== -1 && (fragmentIndex === -1 || queryIndex < fragmentIndex),
     hasFragmentComponent: fragmentIndex !== -1,
   }
+}
+
+function isValidDataUrl(url: URL): boolean {
+  const value = url.pathname
+  const commaIndex = value.indexOf(',')
+  if (commaIndex === -1 || INVALID_PERCENT_ENCODING_PATTERN.test(value)) return false
+
+  const hasBase64Marker = findBase64Marker(value, commaIndex)
+  if (hasBase64Marker === null) return false
+  if (!hasBase64Marker) return true
+
+  let data: string
+  try {
+    data = decodeURIComponent(value.slice(commaIndex + 1))
+  } catch {
+    return false
+  }
+  return data.length === 0 || isBase64(data)
+}
+
+function findBase64Marker(value: string, commaIndex: number): boolean | null {
+  let partStart = 0
+  for (let partEnd = 0; partEnd <= commaIndex; partEnd++) {
+    if (partEnd !== commaIndex && value.charCodeAt(partEnd) !== 59) continue
+    if (partStart === 0 && partEnd > 0) {
+      const slashIndex = value.indexOf('/')
+      if (slashIndex <= 0 || slashIndex >= partEnd - 1) return null
+    }
+    if (isBase64Marker(value, partStart, partEnd)) {
+      return partEnd === commaIndex ? true : null
+    }
+    partStart = partEnd + 1
+  }
+  return false
+}
+
+function isBase64Marker(value: string, start: number, end: number): boolean {
+  return (
+    end - start === 6 &&
+    (value.charCodeAt(start) | 32) === 98 &&
+    (value.charCodeAt(start + 1) | 32) === 97 &&
+    (value.charCodeAt(start + 2) | 32) === 115 &&
+    (value.charCodeAt(start + 3) | 32) === 101 &&
+    value.charCodeAt(start + 4) === 54 &&
+    value.charCodeAt(start + 5) === 52
+  )
 }
 
 function normalizeHostList(values: string[]): ReadonlySet<string> | null {

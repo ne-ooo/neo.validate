@@ -75,6 +75,10 @@ describe('isIP', () => {
       expect(isIP('1::2::3', 6)).toBe(false)
       expect(isIP('192.0.2.1::', 6)).toBe(false)
     })
+    it('rejects impossible address lengths before splitting', () => {
+      expect(isIP('a:'.repeat(100_000), 6)).toBe(false)
+      expect(isIP(`fe80::1%${'a'.repeat(129)}`, 6)).toBe(true)
+    })
   })
 
   describe('invalid inputs', () => {

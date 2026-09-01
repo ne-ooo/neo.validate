@@ -124,6 +124,11 @@ function assertRuntime(module, format) {
     assert.equal(typeof module[name], 'function', `${format} export ${name} is missing`)
   }
 
+  assert.equal(module.isEmail.length, 1)
+  assert.equal(module.isURL.length, 1)
+  assert.equal(module.createEmailValidator.length, 0)
+  assert.equal(module.createURLValidator.length, 0)
+
   assert.equal(module.isEmail('user@example.com'), true)
   assert.equal(module.isEmail('user@example..com'), false)
   assert.equal(
@@ -161,6 +166,29 @@ function assertDocumentationExamples() {
   )
 }
 
+function assertPublishWorkflowHardening() {
+  const workflow = readFileSync(resolve(packageRoot, '.github/workflows/publish.yml'), 'utf8')
+  assert.ok(
+    workflow.includes('LPM_INSTALLER_SHA256'),
+    'publish workflow must verify the pinned LPM installer'
+  )
+  assert.ok(
+    workflow.includes(
+      'LPM_LINUX_X64_SHA256: "a9734d76291cf1b160db57e9229f53697c8d5c7f60b815b059eaec62ad9f7394"'
+    ),
+    'publish workflow must verify the repository-pinned LPM executable digest'
+  )
+  assert.ok(
+    workflow.includes('verified-lpm-${{ github.sha }}'),
+    'publish workflow must transfer the verified LPM executable between jobs'
+  )
+  assert.equal(
+    workflow.includes('npm install --global'),
+    false,
+    'OIDC publish workflow must not run package lifecycle install code'
+  )
+}
+
 function assertBundleBudget() {
   const esmEntry = readFileSync(resolvePackagePath(manifest.module))
   const compressedBytes = gzipSync(esmEntry, { level: 9 }).byteLength
@@ -178,6 +206,7 @@ assertPublishedFilesExist()
 assertSkillVersionsMatch()
 assertTypeScriptConsumersCompile()
 assertDocumentationExamples()
+assertPublishWorkflowHardening()
 
 const esmModule = await import(manifest.name)
 const cjsModule = require(manifest.name)

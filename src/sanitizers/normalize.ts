@@ -1,15 +1,12 @@
 import type { NormalizeEmailOptions } from '../types.js'
+import { normalizeEmailDomain } from '../email-domain.js'
 import { INVALID_OPTION, readOwnDataOption } from '../options.js'
+import { exceedsUtf8Length } from '../utf8.js'
 
 const DOT_PATTERN = /\./g
-const NON_ASCII_PATTERN = /[^\x00-\x7F]/
 const LOW_CONTROL_PATTERN = /[\x00-\x1F\x7F]/g
 const LOW_CONTROL_EXCEPT_NEWLINES_PATTERN = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g
 const NORMALIZABLE_LOCAL_PART_PATTERN = /^[\p{L}\p{N}\p{M}!#$%&'*+/=?^_`{|}~.-]+$/u
-const INVALID_NORMALIZABLE_DOMAIN_CHARACTER_PATTERN = /[^\p{L}\p{N}\p{M}.-]/u
-const NORMALIZABLE_DOMAIN_LABEL_PATTERN =
-  /^[\p{L}\p{N}\p{M}](?:[\p{L}\p{N}\p{M}-]*[\p{L}\p{N}\p{M}])?$/u
-const utf8Encoder = new TextEncoder()
 
 /**
  * Trim whitespace from both ends of string
@@ -115,12 +112,13 @@ export function rtrim(str: string, chars?: string): string {
  */
 export function normalizeEmail(email: string, options: NormalizeEmailOptions = {}): string {
   if (typeof email !== 'string') return ''
-  if (!email.includes('@')) {
+  if (email.length > 254 || !email.includes('@')) {
     return email
   }
 
   const resolvedOptions = resolveNormalizeEmailOptions(options)
   if (!resolvedOptions) return email
+  if (exceedsUtf8Length(email, 254)) return email
 
   const atIndex = email.indexOf('@')
   if (atIndex <= 0 || atIndex !== email.lastIndexOf('@') || atIndex === email.length - 1) {
@@ -139,17 +137,15 @@ export function normalizeEmail(email: string, options: NormalizeEmailOptions = {
   let local = email.slice(0, atIndex)
   let domain = email.slice(atIndex + 1)
   if (
-    exceedsUtf8Length(email, 254) ||
     !isNormalizableLocalPart(local) ||
-    !isNormalizableDomain(domain)
+    exceedsUtf8Length(domain, 254)
   ) {
     return email
   }
+  const canonicalDomain = normalizeEmailDomain(domain, false)
+  if (!canonicalDomain) return email
 
-  const canonicalDomain = domain.toLowerCase()
-  const providerDomain = canonicalDomain.endsWith('.')
-    ? canonicalDomain.slice(0, -1)
-    : canonicalDomain
+  const providerDomain = canonicalDomain
 
   // Convert to lowercase
   if (allLowercase) {
@@ -164,7 +160,7 @@ export function normalizeEmail(email: string, options: NormalizeEmailOptions = {
   ) {
     // Convert googlemail.com to gmail.com
     if (gmailConvertGooglemail && providerDomain === 'googlemail.com') {
-      domain = canonicalDomain.endsWith('.') ? 'gmail.com.' : 'gmail.com'
+      domain = 'gmail.com'
     }
 
     // Remove dots from Gmail addresses (Gmail ignores dots)
@@ -247,31 +243,6 @@ function isNormalizableLocalPart(value: string): boolean {
     !value.includes('..') &&
     NORMALIZABLE_LOCAL_PART_PATTERN.test(value)
   )
-}
-
-function isNormalizableDomain(value: string): boolean {
-  const withoutTrailingDot = value.endsWith('.') ? value.slice(0, -1) : value
-  if (
-    !withoutTrailingDot ||
-    exceedsUtf8Length(value, 254) ||
-    INVALID_NORMALIZABLE_DOMAIN_CHARACTER_PATTERN.test(withoutTrailingDot)
-  ) {
-    return false
-  }
-
-  return withoutTrailingDot
-    .split('.')
-    .every(
-      (label) =>
-        label.length > 0 &&
-        label.length <= 63 &&
-        NORMALIZABLE_DOMAIN_LABEL_PATTERN.test(label)
-    )
-}
-
-function exceedsUtf8Length(value: string, maximumLength: number): boolean {
-  if (value.length > maximumLength) return true
-  return NON_ASCII_PATTERN.test(value) && utf8Encoder.encode(value).length > maximumLength
 }
 
 /**

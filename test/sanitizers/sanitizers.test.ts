@@ -231,6 +231,18 @@ describe('normalizeEmail', () => {
     it('lowercases non-Gmail addresses', () => {
       expect(normalizeEmail('User@Example.COM')).toBe('user@example.com')
     })
+    it('canonicalizes equivalent IDNA domains for comparison', () => {
+      const expected = 'u@xn--xample-9ua.com'
+      expect(normalizeEmail('u@éxample.com')).toBe(expected)
+      expect(normalizeEmail('u@e\u0301xample.com')).toBe(expected)
+      expect(normalizeEmail('u@xn--xample-9ua.com')).toBe(expected)
+      expect(normalizeEmail('u@example.com.')).toBe('u@example.com')
+    })
+    it('preserves domains whose IDNA form exceeds DNS limits', () => {
+      const email = `User@${'é'.repeat(58)}.com`
+      expect(normalizeEmail(email)).toBe(email)
+      expect(normalizeEmail('User@éxample.com')).toBe('user@xn--xample-9ua.com')
+    })
     it('returns input unchanged when no @ sign', () => {
       expect(normalizeEmail('notanemail')).toBe('notanemail')
     })
@@ -245,6 +257,8 @@ describe('normalizeEmail', () => {
       expect(normalizeEmail('user@-example.com')).toBe('user@-example.com')
       const oversizedLocal = `${'A'.repeat(65)}@GMAIL.COM`
       expect(normalizeEmail(oversizedLocal)).toBe(oversizedLocal)
+      const oversizedDomain = `User@${'a'.repeat(100_000)}`
+      expect(normalizeEmail(oversizedDomain)).toBe(oversizedDomain)
     })
     it('returns a string for malformed runtime inputs', () => {
       expect(normalizeEmail(null as any)).toBe('')

@@ -27,6 +27,9 @@ describe('isUUID', () => {
     it('rejects plain text', () => {
       expect(isUUID('not-a-uuid')).toBe(false)
     })
+    it('rejects oversized input before fixed-format work', () => {
+      expect(isUUID('A'.repeat(100_000))).toBe(false)
+    })
     it('accepts nil and max UUIDs defined by RFC 9562', () => {
       expect(isUUID('00000000-0000-0000-0000-000000000000')).toBe(true)
       expect(isUUID('ffffffff-ffff-ffff-ffff-ffffffffffff')).toBe(true)
